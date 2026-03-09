@@ -16,7 +16,7 @@ async function main() {
   );
 
   const contract = new ethers.Contract(
-    "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "0x610178dA211FEF7D417bC0e6FeD39F05609AD788",
     artifact.abi,
     borrower
   );

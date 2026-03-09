@@ -115,7 +115,7 @@ contract SanjeevaniEscrow {
             expectedDuration: _durationHours * 1 hours,
             depositAmount: deposit,
             rentAmount: rent,
-            status: LoanStatus.ACTIVE
+            status: LoanStatus.REQUESTED
         });
 
         emit LoanCreated(
@@ -126,5 +126,33 @@ contract SanjeevaniEscrow {
             _quantity,
             deposit
         );
+    }
+
+    function confirmDelivery(uint256 _loanId) public {
+        Loan storage loan = loans[_loanId];
+
+        require(loan.loanId != 0, "Loan does not exist");
+
+        require(msg.sender == loan.borrower || msg.sender == loan.lender,
+            "Unauthorized");
+
+        require(loan.status == LoanStatus.REQUESTED,
+            "Invalid state");
+
+        loan.status = LoanStatus.ACTIVE;
+    }
+
+    function markReturned(uint256 _loanId) public {
+        Loan storage loan = loans[_loanId];
+
+        require(loan.loanId != 0, "Loan not found");
+
+        require(msg.sender == loan.borrower,
+            "Only borrower can return");
+
+        require(loan.status == LoanStatus.ACTIVE,
+            "Loan not active");
+
+        loan.status = LoanStatus.RETURN_REQUESTED;
     }
 }
