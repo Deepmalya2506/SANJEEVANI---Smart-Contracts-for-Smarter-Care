@@ -1,0 +1,39 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-e74ee16fa5ef531bfabaff925be3446875f86900",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/SanjeevaniEscrow.sol": "project/contracts/SanjeevaniEscrow.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/SanjeevaniEscrow.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\ncontract SanjeevaniEscrow {\r\n\r\n    address public owner;\r\n\r\n    constructor() {\r\n        owner = msg.sender;\r\n    }\r\n\r\n    struct Equipment {\r\n        uint256 id;\r\n        string name;\r\n        uint256 hourlyRate;\r\n        uint256 cautionDeposit;\r\n        bool exists;\r\n    }\r\n\r\n    enum LoanStatus {\r\n        REQUESTED,\r\n        ACTIVE,\r\n        RETURN_PENDING,\r\n        COMPLETED,\r\n        DISPUTE\r\n    }\r\n\r\n    struct Loan {\r\n        uint256 loanId;\r\n        address borrower;\r\n        address lender;\r\n        uint256 equipmentId;\r\n        uint256 quantity;\r\n        uint256 startTime;\r\n        uint256 expectedDuration; // seconds\r\n        uint256 depositAmount;\r\n        uint256 rentAmount;\r\n        LoanStatus status;\r\n    }\r\n\r\n    uint256 public equipmentCounter;\r\n    uint256 public loanCounter;\r\n\r\n    mapping(uint256 => Equipment) public equipments;\r\n    mapping(uint256 => Loan) public loans;\r\n\r\n    event EquipmentRegistered(\r\n        uint256 id,\r\n        string name,\r\n        uint256 hourlyRate,\r\n        uint256 cautionDeposit\r\n    );\r\n\r\n    event LoanCreated(\r\n        uint256 loanId,\r\n        address borrower,\r\n        address lender,\r\n        uint256 equipmentId,\r\n        uint256 quantity,\r\n        uint256 depositAmount\r\n    );\r\n\r\n    function registerEquipment(\r\n        string memory _name,\r\n        uint256 _hourlyRate,\r\n        uint256 _cautionDeposit\r\n    ) public {\r\n\r\n        equipmentCounter++;\r\n\r\n        equipments[equipmentCounter] = Equipment({\r\n            id: equipmentCounter,\r\n            name: _name,\r\n            hourlyRate: _hourlyRate,\r\n            cautionDeposit: _cautionDeposit,\r\n            exists: true\r\n        });\r\n\r\n        emit EquipmentRegistered(\r\n            equipmentCounter,\r\n            _name,\r\n            _hourlyRate,\r\n            _cautionDeposit\r\n        );\r\n    }\r\n\r\n    function createLoanRequest(\r\n        address _lender,\r\n        uint256 _equipmentId,\r\n        uint256 _quantity,\r\n        uint256 _durationHours\r\n    ) public payable {\r\n\r\n        require(equipments[_equipmentId].exists, \"Equipment not registered\");\r\n        require(_quantity > 0, \"Invalid quantity\");\r\n\r\n        Equipment memory eq = equipments[_equipmentId];\r\n\r\n        uint256 rent = eq.hourlyRate * _quantity * _durationHours;\r\n        uint256 deposit = eq.cautionDeposit * _quantity;\r\n\r\n        uint256 totalRequired = rent + deposit;\r\n\r\n        require(msg.value == totalRequired, \"Incorrect deposit amount\");\r\n\r\n        loanCounter++;\r\n\r\n        loans[loanCounter] = Loan({\r\n            loanId: loanCounter,\r\n            borrower: msg.sender,\r\n            lender: _lender,\r\n            equipmentId: _equipmentId,\r\n            quantity: _quantity,\r\n            startTime: block.timestamp,\r\n            expectedDuration: _durationHours * 1 hours,\r\n            depositAmount: deposit,\r\n            rentAmount: rent,\r\n            status: LoanStatus.REQUESTED\r\n        });\r\n\r\n        emit LoanCreated(\r\n            loanCounter,\r\n            msg.sender,\r\n            _lender,\r\n            _equipmentId,\r\n            _quantity,\r\n            deposit\r\n        );\r\n    }\r\n\r\n    function confirmDelivery(uint256 _loanId) public {\r\n        Loan storage loan = loans[_loanId];\r\n\r\n        require(loan.loanId != 0, \"Loan does not exist\");\r\n\r\n        require(msg.sender == loan.borrower || msg.sender == loan.lender,\r\n            \"Unauthorized\");\r\n\r\n        require(loan.status == LoanStatus.REQUESTED,\r\n            \"Invalid state\");\r\n\r\n        loan.status = LoanStatus.ACTIVE;\r\n    }\r\n\r\n    function markReturned(uint256 _loanId) public {\r\n        Loan storage loan = loans[_loanId];\r\n\r\n        require(loan.loanId != 0, \"Loan not found\");\r\n\r\n        require(msg.sender == loan.borrower,\r\n            \"Only borrower can return\");\r\n\r\n        require(loan.status == LoanStatus.ACTIVE,\r\n            \"Loan not active\");\r\n\r\n        loan.status = LoanStatus.RETURN_PENDING;\r\n    }\r\n\r\n    function settleLoan(uint256 _loanId) public {\r\n\r\n        Loan storage loan = loans[_loanId];\r\n\r\n        require(loan.loanId != 0, \"Loan not found\");\r\n\r\n        require(loan.status == LoanStatus.RETURN_PENDING,\r\n            \"Loan not ready for settlement\");\r\n\r\n        uint256 totalDeposit = loan.depositAmount;\r\n        uint256 rent = loan.rentAmount;\r\n\r\n        address lender = loan.lender;\r\n        address borrower = loan.borrower;\r\n\r\n        // pay rent to lender\r\n        payable(lender).transfer(rent);\r\n\r\n        // refund deposit to borrower\r\n        payable(borrower).transfer(totalDeposit);\r\n\r\n        loan.status = LoanStatus.COMPLETED;\r\n    }\r\n}"
+      }
+    }
+  }
+}
