@@ -60,6 +60,22 @@ contract SanjeevaniEscrow {
         uint256 depositAmount
     );
 
+    event DeliveryConfirmed(
+        uint256 loanId,
+        address borrower,
+        address lender
+    );
+
+    event ReturnRequested(
+        uint256 loanId
+    );
+
+    event LoanSettled(
+        uint256 loanId,
+        uint256 rentPaid,
+        uint256 depositReturned
+    );
+
     function registerEquipment(
         string memory _name,
         uint256 _hourlyRate,
@@ -140,6 +156,12 @@ contract SanjeevaniEscrow {
             "Invalid state");
 
         loan.status = LoanStatus.ACTIVE;
+
+        emit DeliveryConfirmed(
+            loan.loanId,
+            loan.borrower,
+            loan.lender
+        );
     }
 
     function markReturned(uint256 _loanId) public {
@@ -154,6 +176,8 @@ contract SanjeevaniEscrow {
             "Loan not active");
 
         loan.status = LoanStatus.RETURN_PENDING;
+
+        emit ReturnRequested(_loanId);
     }
 
     function settleLoan(uint256 _loanId) public {
@@ -178,5 +202,12 @@ contract SanjeevaniEscrow {
         payable(borrower).transfer(totalDeposit);
 
         loan.status = LoanStatus.COMPLETED;
+
+        emit LoanSettled(
+            _loanId,
+            rent,
+            totalDeposit
+        );
     }
 }
+
