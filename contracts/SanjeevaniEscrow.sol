@@ -211,3 +211,26 @@ contract SanjeevaniEscrow {
     }
 }
 
+/*
+
+registerEquipment()
+        ↓
+EquipmentRegistered
+
+createLoanRequest()
+        ↓
+LoanCreated
+
+confirmDelivery()
+        ↓
+DeliveryConfirmed
+
+markReturned()
+        ↓
+ReturnRequested
+
+settleLoan()
+        ↓
+LoanSettled
+
+*/
