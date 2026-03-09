@@ -153,6 +153,6 @@ contract SanjeevaniEscrow {
         require(loan.status == LoanStatus.ACTIVE,
             "Loan not active");
 
-        loan.status = LoanStatus.RETURN_REQUESTED;
+        loan.status = LoanStatus.RETURN_PENDING;
     }
 }

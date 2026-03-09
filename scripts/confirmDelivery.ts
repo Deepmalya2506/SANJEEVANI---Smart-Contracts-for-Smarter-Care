@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { CONTRACT_ADDRESS } from "./config.js";
 import fs from "fs";
 
 async function main() {
@@ -11,7 +12,7 @@ async function main() {
   );
 
   const contract = new ethers.Contract(
-    "0x610178dA211FEF7D417bC0e6FeD39F05609AD788",
+    CONTRACT_ADDRESS,
     artifact.abi,
     signer
   );
