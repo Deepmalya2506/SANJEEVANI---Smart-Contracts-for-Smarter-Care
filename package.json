@@ -16,6 +16,7 @@
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.1.11",
     "mocha": "^11.7.5",
+    "ts-node": "^10.9.2",
     "typescript": "~5.8.0"
   }
 }
