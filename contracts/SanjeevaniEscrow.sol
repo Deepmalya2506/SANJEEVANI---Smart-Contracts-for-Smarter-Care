@@ -155,4 +155,28 @@ contract SanjeevaniEscrow {
 
         loan.status = LoanStatus.RETURN_PENDING;
     }
+
+    function settleLoan(uint256 _loanId) public {
+
+        Loan storage loan = loans[_loanId];
+
+        require(loan.loanId != 0, "Loan not found");
+
+        require(loan.status == LoanStatus.RETURN_PENDING,
+            "Loan not ready for settlement");
+
+        uint256 totalDeposit = loan.depositAmount;
+        uint256 rent = loan.rentAmount;
+
+        address lender = loan.lender;
+        address borrower = loan.borrower;
+
+        // pay rent to lender
+        payable(lender).transfer(rent);
+
+        // refund deposit to borrower
+        payable(borrower).transfer(totalDeposit);
+
+        loan.status = LoanStatus.COMPLETED;
+    }
 }
