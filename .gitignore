@@ -3,6 +3,7 @@
 
 # Compilation output
 /dist
+/venv
 
 # pnpm deploy output
 /bundle
