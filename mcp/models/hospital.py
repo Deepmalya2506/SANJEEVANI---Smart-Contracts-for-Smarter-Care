@@ -1,16 +1,7 @@
-hospital_schema = {
+from pydantic import BaseModel
 
-    "hospital_id": "HOSP_A",
-
-    "name": "Apollo Kolkata",
-
-    "location": {
-        "lat": 22.5726,
-        "lng": 88.3639
-    },
-
-    "inventory": [
-        "OXYGEN_CYLINDER",
-        "VENTILATOR"
-    ]
-}
+class Hospital(BaseModel):
+    hospital_id: str
+    name: str
+    wallet: str
+    location: str

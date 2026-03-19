@@ -1,16 +1,7 @@
-equipment_schema = {
-    "hospital_id": "HOSP_A",
+from pydantic import BaseModel
 
-    "equipment_type": "OXYGEN_CYLINDER",
-
-    "assets": [
-        {
-            "asset_uid": "OXY001",
-            "status": "AVAILABLE"
-        },
-        {
-            "asset_uid": "OXY002",
-            "status": "IN_USE"
-        }
-    ]
-}
+class EquipmentAsset(BaseModel):
+    uid: str
+    equipment_type: int
+    hospital_id: str
+    status: str

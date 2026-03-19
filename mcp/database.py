@@ -1,11 +1,10 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
 
-MONGO_URL = "mongodb://localhost:27017"
-
-client = AsyncIOMotorClient(MONGO_URL)
+client = MongoClient("mongodb://localhost:27017")
 
 db = client["sanjeevani"]
 
-hospitals_collection = db["hospitals"]
-equipment_collection = db["equipment"]
-transactions_collection = db["transactions"]
+hospital_collection = db["hospitals"]
+equipment_type_collection = db["equipment_types"]
+equipment_collection = db["equipment_assets"]
+transaction_collection = db["inventory_transactions"]
