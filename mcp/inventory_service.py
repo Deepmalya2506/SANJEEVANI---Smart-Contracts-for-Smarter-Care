@@ -1,32 +1,21 @@
 from mcp.database import equipment_collection
 
+async def reserve_equipment(lender, equipment_id, quantity):
 
-async def reserve_equipment(hospital_id, equipment_type, quantity):
+    available = equipment_collection.find({
+        "equipment_type": equipment_id,
+        "status": "AVAILABLE"
+    }).limit(quantity)
 
-    equipment = await equipment_collection.find_one({
-        "hospital_id": hospital_id,
-        "equipment_type": equipment_type
-    })
+    reserved = []
 
-    available_assets = [
-        asset for asset in equipment["assets"] #type:ignore
-        if asset["status"] == "AVAILABLE"
-    ]
-
-    selected = available_assets[:quantity]
-
-    for asset in selected:
-
-        await equipment_collection.update_one(
-            {
-                "hospital_id": hospital_id,
-                "assets.asset_uid": asset["asset_uid"]
-            },
-            {
-                "$set": {
-                    "assets.$.status": "RESERVED"
-                }
-            }
+    for item in available:
+        equipment_collection.update_one(
+            {"_id": item["_id"]},
+            {"$set": {"status": "RESERVED"}}
         )
+        reserved.append(item["_id"])
 
-    return selected
+    print("Reserved equipment:", reserved)
+
+    return reserved
