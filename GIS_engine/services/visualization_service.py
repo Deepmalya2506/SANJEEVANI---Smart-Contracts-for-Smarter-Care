@@ -28,3 +28,27 @@ def create_route_map(geometry):
     folium.Marker(lat_lon_coords[-1], tooltip="Destination").add_to(m)
 
     return m
+
+def create_isochrone_map(center, polygon):
+    import folium
+
+    m = folium.Map(location=[center["lat"], center["lon"]], zoom_start=13)
+
+    # Draw polygon
+    folium.GeoJson(
+        polygon,
+        style_function=lambda x: {
+            "fillColor": "blue",
+            "color": "blue",
+            "weight": 2,
+            "fillOpacity": 0.2,
+        }
+    ).add_to(m)
+
+    # Mark center
+    folium.Marker(
+        [center["lat"], center["lon"]],
+        tooltip="Center"
+    ).add_to(m)
+
+    return m

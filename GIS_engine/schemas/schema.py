@@ -26,3 +26,7 @@ class NearestRequest(BaseModel):
 class RouteRequest(BaseModel):
     source: Coordinate
     destination: Coordinate
+
+class IsochroneRequest(BaseModel):
+    center: Coordinate
+    time_minutes: int

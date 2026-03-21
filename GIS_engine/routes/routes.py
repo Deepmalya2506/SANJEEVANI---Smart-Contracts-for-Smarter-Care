@@ -1,7 +1,8 @@
 from fastapi import APIRouter
-from schemas.schema import RouteRequest
+from schemas.schema import RouteRequest, IsochroneRequest
 from services.osrm_service import get_route
 from services.visualization_service import create_route_map
+from services.isochrone_service import generate_circle, time_to_radius_km
 
 router = APIRouter()
 
@@ -28,6 +29,48 @@ def route_map_api(request: RouteRequest):
 
     file_path = "route_map.html"
     map_obj.save(file_path)
+
+    return {
+        "status": "success",
+        "map_file": file_path
+    }
+
+@router.post("/isochrone")
+def isochrone_api(request: IsochroneRequest):
+    lat = request.center.lat
+    lon = request.center.lon
+
+    radius_km = time_to_radius_km(request.time_minutes)
+
+    polygon = generate_circle(lat, lon, radius_km)
+
+    return {
+        "status": "success",
+        "data": {
+            "radius_km": radius_km,
+            "isochrone": polygon
+        }
+    }
+
+@router.post("/isochrone-map")
+def isochrone_map_api(request: IsochroneRequest):
+    radius_km = time_to_radius_km(request.time_minutes)
+
+    polygon = generate_circle(
+        request.center.lat,
+        request.center.lon,
+        radius_km
+    )
+
+    from services.visualization_service import create_isochrone_map
+
+    m = create_isochrone_map(
+        request.center.dict(),
+        polygon
+    )
+
+    file_path = "isochrone_map.html"
+    m.save(file_path)
 
     return {
         "status": "success",
