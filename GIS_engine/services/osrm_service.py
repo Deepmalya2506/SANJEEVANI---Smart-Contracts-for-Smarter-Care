@@ -1,5 +1,5 @@
 import requests
-from config import OSRM_BASE_URL
+from config import OSRM_BASE_URL, OSRM_ROUTE_URL
 
 def get_distance_matrix(coordinates: list):
     """
@@ -22,4 +22,25 @@ def get_distance_matrix(coordinates: list):
     return {
         "distances": data.get("distances"),
         "durations": data.get("durations")
+    }
+
+
+def get_route(source, destination):
+    """
+    source, destination = (lon, lat)
+    """
+
+    coord_string = f"{source[0]},{source[1]};{destination[0]},{destination[1]}"
+
+    url = OSRM_ROUTE_URL + coord_string + "?overview=full&geometries=geojson"
+
+    response = requests.get(url)
+    data = response.json()
+
+    route = data["routes"][0]
+
+    return {
+        "geometry": route["geometry"],  # GeoJSON line
+        "distance": route["distance"],
+        "duration": route["duration"]
     }

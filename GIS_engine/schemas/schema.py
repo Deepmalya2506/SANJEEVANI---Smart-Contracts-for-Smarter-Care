@@ -13,3 +13,16 @@ class MatrixResponse(BaseModel):
     """Connectivity Results"""
     distances: List[List[float]]
     durations: List[List[float]]
+
+class HospitalInput(BaseModel):
+    id: str
+    lon: float
+    lat: float
+
+class NearestRequest(BaseModel):
+    user_location: Coordinate
+    hospitals: List[HospitalInput]
+
+class RouteRequest(BaseModel):
+    source: Coordinate
+    destination: Coordinate
