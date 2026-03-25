@@ -30,3 +30,7 @@ class RouteRequest(BaseModel):
 class IsochroneRequest(BaseModel):
     center: Coordinate
     time_minutes: int
+
+class BestOptionRequest(BaseModel):
+    origin: Coordinate
+    hospitals: list[HospitalInput]

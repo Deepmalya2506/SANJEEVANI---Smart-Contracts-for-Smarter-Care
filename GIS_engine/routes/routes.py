@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from schemas.schema import RouteRequest, IsochroneRequest
+from schemas.schema import RouteRequest, IsochroneRequest, BestOptionRequest
 from services.osrm_service import get_route
 from services.visualization_service import create_route_map
 from services.isochrone_service import generate_circle, time_to_radius_km
+from services.geo_service import find_best_option
 
 router = APIRouter()
 
@@ -75,4 +76,25 @@ def isochrone_map_api(request: IsochroneRequest):
     return {
         "status": "success",
         "map_file": file_path
+    }
+
+@router.post("/best-option")
+def best_option_api(request: BestOptionRequest):
+
+    origin = (request.origin.lon, request.origin.lat)
+
+    hospitals = [
+        {
+            "id": h.id,
+            "lat": h.lat,
+            "lon": h.lon
+        }
+        for h in request.hospitals
+    ]
+
+    result = find_best_option(origin, hospitals)
+
+    return {
+        "status": "success",
+        "data": result
     }
