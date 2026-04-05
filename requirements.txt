@@ -6,3 +6,4 @@ pydantic
 requests
 pandas
 python-multipart
+pydantic-settings

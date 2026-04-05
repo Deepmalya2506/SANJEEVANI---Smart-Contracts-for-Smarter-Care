@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     DB_NAME: str
     GIS_URL: str
     BLOCKCHAIN_URL: str
+    CONTRACT_ADDRESS: str
 
     class Config:
         env_file = ".env"

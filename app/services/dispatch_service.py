@@ -23,12 +23,15 @@ def dispatch_logic(request_data):
 
     # Step 2: GIS call
     best = get_best_option(origin, hospitals)
+    best_hospital = next(h for h in hospitals if h["id"] == best["hospital_id"])
 
     # Step 3: Blockchain
     loan = create_loan({
-        "hospital_id": best["hospital_id"],
-        "equipment_type": equipment_type,
-        "quantity": quantity
+        "lender": best["hospital_id"]["wallet"],  # VERY IMPORTANT
+        "equipment_id": equipment_type,
+        "quantity": quantity,
+        "duration": 4,
+        "value": 8000  # must match contract logic
     })
 
     return {
