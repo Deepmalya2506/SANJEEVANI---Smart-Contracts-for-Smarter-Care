@@ -1,6 +1,9 @@
 # Node modules
 /node_modules
 
+# venv
+venv/
+
 # Compilation output
 /dist
 
