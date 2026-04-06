@@ -6,8 +6,10 @@ class Settings(BaseSettings):
     GIS_URL: str
     BLOCKCHAIN_URL: str
     CONTRACT_ADDRESS: str
+    GROQ_API_KEY: str   # ✅ added
 
     class Config:
         env_file = ".env"
 
-settings = Settings()
+# 🚨 THIS LINE MUST EXIST
+settings = Settings() 

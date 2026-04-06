@@ -7,3 +7,5 @@ requests
 pandas
 python-multipart
 pydantic-settings
+fastmcp
+groq
