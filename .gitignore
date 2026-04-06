@@ -21,3 +21,6 @@ venv/
 
 # Hardhat coverage reports
 /coverage
+
+# .env var
+.env
