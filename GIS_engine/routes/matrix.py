@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from schemas.schema import MatrixRequest
-from services.osrm_service import get_distance_matrix
+from GIS_engine.schemas.schema import MatrixRequest
+from GIS_engine.services.osrm_service import get_distance_matrix
 
 router = APIRouter()
 

@@ -1,9 +1,9 @@
 from fastapi import APIRouter
-from schemas.schema import RouteRequest, IsochroneRequest, BestOptionRequest
-from services.osrm_service import get_route
-from services.visualization_service import create_route_map
-from services.isochrone_service import generate_circle, time_to_radius_km
-from services.geo_service import find_best_option
+from GIS_engine.schemas.schema import RouteRequest, IsochroneRequest, BestOptionRequest
+from GIS_engine.services.osrm_service import get_route
+from GIS_engine.services.visualization_service import create_route_map
+from GIS_engine.services.isochrone_service import generate_circle, time_to_radius_km
+from GIS_engine.services.geo_service import find_best_option
 
 router = APIRouter()
 

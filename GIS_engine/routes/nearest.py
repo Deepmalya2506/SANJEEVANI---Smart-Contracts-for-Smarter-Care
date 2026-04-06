@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from schemas.schema import NearestRequest
-from services.geo_service import find_nearest
+from GIS_engine.schemas.schema import NearestRequest
+from GIS_engine.services.geo_service import find_nearest
 
 router = APIRouter()
 

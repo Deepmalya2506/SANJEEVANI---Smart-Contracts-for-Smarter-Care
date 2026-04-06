@@ -1,5 +1,5 @@
 import requests
-from config import OSRM_BASE_URL, OSRM_ROUTE_URL
+from GIS_engine.config import OSRM_BASE_URL, OSRM_ROUTE_URL
 
 def get_distance_matrix(coordinates: list):
     """

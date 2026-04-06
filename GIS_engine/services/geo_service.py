@@ -1,4 +1,4 @@
-from services.osrm_service import get_distance_matrix
+from GIS_engine.services.osrm_service import get_distance_matrix
 
 def find_nearest(user_location, hospitals):
     """

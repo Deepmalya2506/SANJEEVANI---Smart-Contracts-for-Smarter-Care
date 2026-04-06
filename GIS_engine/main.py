@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from routes import matrix, nearest
-from routes import routes
+from GIS_engine.routes import matrix, nearest
+from GIS_engine.routes import routes
 
 app = FastAPI(title="Sanjeevani GIS Engine")
 
