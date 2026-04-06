@@ -9,4 +9,7 @@ def get_best_option(origin, hospitals):
             "hospitals": hospitals
         }
     )
-    return response.json()
+    try:
+        return response.json()
+    except Exception:
+        return {"error": "Invalid GIS response", "raw": response.text}

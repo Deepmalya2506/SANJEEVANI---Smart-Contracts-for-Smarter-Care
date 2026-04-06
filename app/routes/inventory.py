@@ -19,15 +19,11 @@ async def upload_inventory(file: UploadFile = File(...)):
 
     return {"message": "Inventory uploaded"}
 
-@router.get("/inventory/{hospital_id}")
-def get_inventory(hospital_id: str):
-    return list(inventory_collection.find(
-        {"hospital_id": hospital_id},
-        {"_id": 0}
-    ))
-
 @router.get("/inventory/search")
 def search_inventory(equipment_type: int, quantity: int):
+
+    equipment_type = int(equipment_type)  # 🔥 force int
+
     results = inventory_collection.aggregate([
         {
             "$match": {
@@ -48,4 +44,16 @@ def search_inventory(equipment_type: int, quantity: int):
         }
     ])
 
+    print("QUERY:", {
+        "equipment_type": equipment_type,
+        "quantity": quantity
+    })
+
     return list(results)
+
+@router.get("/inventory/{hospital_id}")
+def get_inventory(hospital_id: str):
+    return list(inventory_collection.find(
+        {"hospital_id": hospital_id},
+        {"_id": 0}
+    ))

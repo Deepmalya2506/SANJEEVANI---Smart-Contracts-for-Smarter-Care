@@ -39,21 +39,24 @@ def dispatch_logic(request_data):
         for h in hospitals
     ]
 
-    best = get_best_option(origin, gis_hospitals)
+    best_response = get_best_option(origin, gis_hospitals)
 
-    best_data = best["data"]
-    best_id = best_data["best_hospital"]
+    print("GIS RESPONSE:", best_response)
 
-    print("GIS REQUEST:", {
-        "origin": origin,
-        "hospitals": gis_hospitals
-    })
+    if "error" in best_response:
+        return {"error": "GIS failed: " + best_response["error"]}
 
-    print("GIS RESPONSE:", best)
+    best = best_response["data"]
+
+    best_id = best["best_hospital"]
 
     best_hospital = next(
-        h for h in hospitals if h["id"] == best_id
+        (h for h in hospitals if h["id"] == best_id),
+        None
     )
+
+    if best_hospital is None:
+        return {"error": "Best hospital not found in DB"}
 
     # Step 3: Blockchain
     loan = create_loan({
@@ -65,6 +68,6 @@ def dispatch_logic(request_data):
     })
 
     return {
-        "selected_hospital": best_data,
+        "selected_hospital": best,
         "loan": loan
     }
