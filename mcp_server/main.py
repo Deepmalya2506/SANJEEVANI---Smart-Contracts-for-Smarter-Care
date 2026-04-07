@@ -1,194 +1,238 @@
-import os
 import json
+import requests
 from groq import Groq
 from dotenv import load_dotenv
+import os
 
-from app.services.gis_client import get_best_option
-from app.services.blockchain_client import create_loan
-from app.core.database import inventory_collection, hospital_collection
+from app.core.database import hospital_collection
 
 load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-MODEL = "openai/gpt-oss-120b"
-
 # =========================
-# TOOL FUNCTIONS
+# HELPERS
 # =========================
-
-def search_inventory(equipment_type: int, quantity: int):
-    results = list(inventory_collection.aggregate([
-        {"$match": {"equipment_type": equipment_type, "status": "AVAILABLE"}},
-        {"$group": {"_id": "$hospital_id", "count": {"$sum": 1}}},
-        {"$match": {"count": {"$gte": quantity}}}
-    ]))
-
-    hospital_ids = [r["_id"] for r in results]
-
-    hospitals = list(hospital_collection.find(
-        {"id": {"$in": hospital_ids}},
-        {"_id": 0}
-    ))
-
-    return hospitals
-
-
-def get_location_of_hospitals(hospitals):
-    return [
-        {
-            "id": h["id"],
-            "lat": h["location"]["lat"],
-            "lon": h["location"]["lon"]
-        }
-        for h in hospitals
-    ]
 
 def get_hospital_location(hospital_id):
     hospital = hospital_collection.find_one({"id": hospital_id})
-    if not hospital:
-        return None
-    return hospital["location"]
+    return hospital["location"] if hospital else None
 
+def safe_request(method, url, **kwargs):
+    try:
+        res = requests.request(method, url, timeout=10, **kwargs)
+
+        print("\n🌐 CALL:", url)
+        print("STATUS:", res.status_code)
+        print("RAW:", res.text[:300])
+
+        if res.status_code != 200:
+            return {"error": f"{url} failed", "raw": res.text}
+
+        try:
+            return res.json()
+        except:
+            return {"error": "Invalid JSON", "raw": res.text}
+
+    except Exception as e:
+        return {"error": str(e)}
 # =========================
-# TOOL DEFINITIONS (LLM)
-# =========================
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_inventory",
-            "description": "Find hospitals with required equipment",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "equipment_type": {"type": "integer"},
-                    "quantity": {"type": "integer"}
-                },
-                "required": ["equipment_type", "quantity"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "dispatch",
-            "description": "Select best hospital and create loan",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "equipment_type": {"type": "integer"},
-                    "quantity": {"type": "integer"},
-                    "lat": {"type": "number"},
-                    "lon": {"type": "number"}
-                },
-                "required": ["equipment_type", "quantity", "lat", "lon"]
-            }
-        }
-    }
-]
-
-
-# =========================
-# TOOL EXECUTION
+# TOOL EXECUTOR
 # =========================
 
-def execute_tool(name, args):
+def execute_tool(name, args, hospital_id=None):
 
+    # ---------------- DB ----------------
     if name == "search_inventory":
-        return search_inventory(**args)
+        return safe_request(
+            "GET",
+            "http://localhost:8000/inventory/search",
+            params=args
+        )
 
-    elif name == "dispatch":
+    if name == "get_hospitals":
+        return safe_request(
+            "GET",
+            "http://localhost:8000/hospitals"
+        )
 
-        equipment_type = args["equipment_type"]
-        quantity = args["quantity"]
-        origin = {"lat": args["lat"], "lon": args["lon"]}
+    if name == "get_inventory":
+        return safe_request(
+            "GET",
+            f"http://localhost:8000/inventory/{args['hospital_id']}"
+        )
 
-        # 1. inventory
-        hospitals = search_inventory(equipment_type, quantity)
+    # ---------------- GIS ----------------
+    if name == "find_nearest_hospitals":
 
-        if not hospitals:
-            return {"error": "No hospitals available"}
+        hospitals = safe_request(
+            "GET",
+            "http://localhost:8000/hospitals"
+        )
 
-        # 2. GIS
-        gis_input = get_location_of_hospitals(hospitals)
-        best = get_best_option(origin, gis_input)
+        if "error" in hospitals:
+            return hospitals
 
-        best_id = best["data"]["best_hospital"]
+        gis_input = [
+            {
+                "id": h["id"],
+                "lat": h["location"]["lat"],
+                "lon": h["location"]["lon"]
+            }
+            for h in hospitals
+        ]
 
-        selected = next(h for h in hospitals if h["id"] == best_id)
+        return safe_request(
+            "POST",
+            "http://localhost:8001/gis/best-option",
+            json={
+                "origin": args,
+                "hospitals": gis_input
+            }
+        )
 
-        # 3. blockchain
-        loan = create_loan({
-            "lender": selected["wallet"],
-            "equipment_id": equipment_type,
-            "quantity": quantity,
-            "duration": 4,
-            "value": 8000
-        })
+    if name == "get_route":
+        return safe_request(
+            "POST",
+            "http://localhost:8001/gis/route",
+            json=args
+        )
 
-        return {
-            "hospital": selected,
-            "route": best,
-            "loan": loan
-        }
+    if name == "get_isochrone":
+        return safe_request(
+            "POST",
+            "http://localhost:8001/gis/isochrone",
+            json=args
+        )
+
+    # ---------------- DISPATCH ----------------
+    if name == "dispatch":
+        return safe_request(
+            "POST",
+            "http://localhost:8000/dispatch",
+            json=args
+        )
 
     return {"error": "Unknown tool"}
 
-
 # =========================
-# AGENT LOOP
+# MCP AGENT
 # =========================
 
-def run_agent(user_query: str, hospital_id: str = None):
+def run_agent(user_query: str, hospital_id:str=None):
+
+    # 🔥 inject context
+    if hospital_id:
+        loc = get_hospital_location(hospital_id)
+        if loc:
+            user_query += f" (location lat {loc['lat']} lon {loc['lon']})"
 
     messages = [
         {
             "role": "system",
             "content": (
-                "You are an AI healthcare logistics assistant.\n"
-                f"The current hospital is: {hospital_id}.\n"
-                "Use this as reference when answering.\n"
-                "For queries like 'near me', use hospital location.\n"
+                "You are Sanjeevani AI, a healthcare logistics orchestrator.\n\n"
+
+                "You MUST decide which tool to use.\n\n"
+
+                "Rules:\n"
+                "- Equipment queries → search_inventory\n"
+                "- Closest hospitals → find_nearest_hospitals\n"
+                "- Route / distance → get_route\n"
+                "- Coverage / radius → get_isochrone\n"
+                "- Full request (send equipment) → dispatch\n"
+                "- NEVER ask for location if provided\n"
+                "- Always prefer tool usage over guessing\n"
             )
         },
         {"role": "user", "content": user_query}
     ]
 
-    while True:
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search_inventory",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "equipment_type": {"type": "integer"},
+                        "quantity": {"type": "integer"}
+                    },
+                    "required": ["equipment_type", "quantity"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "find_nearest_hospitals",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "lat": {"type": "number"},
+                        "lon": {"type": "number"}
+                    },
+                    "required": ["lat", "lon"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "dispatch",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "equipment_type": {"type": "integer"},
+                        "quantity": {"type": "integer"},
+                        "location": {"type": "object"}
+                    },
+                    "required": ["equipment_type", "quantity", "location"]
+                }
+            }
+        }
+    ]
 
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto"
-        )
+    # 🔥 FIRST LLM CALL
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=messages,
+        tools=tools
+    )
 
-        msg = response.choices[0].message
+    msg = response.choices[0].message
 
-        if not msg.tool_calls:
-            return msg.content
-
-        if "near me" in user_query.lower() and hospital_id:
-            location = get_hospital_location(hospital_id)
-            if location:
-                user_query += f" (location: {location})"
-
+    # =========================
+    # TOOL EXECUTION LOOP
+    # =========================
+    if msg.tool_calls:
         tool_call = msg.tool_calls[0]
-        name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
 
-        print(f"\n🛠 TOOL: {name}")
+        print(f"\n🛠 TOOL: {tool_call.function.name}")
         print("ARGS:", args)
 
-        result = execute_tool(name, args)
+        result = execute_tool(tool_call.function.name, args, hospital_id)
 
         print("RESULT:", result)
 
-        messages.append(msg)
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call.id,
-            "content": json.dumps(result)
-        })
+        # 🔁 RETURN TO LLM
+    followup = client.chat.completions.create(
+        model="openai/gpt-oss-20b",
+        messages=[
+            *messages,
+            {
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": msg.tool_calls
+            },
+            {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(result)
+            }
+        ]
+    )
+
+    return followup.choices[0].message.content
