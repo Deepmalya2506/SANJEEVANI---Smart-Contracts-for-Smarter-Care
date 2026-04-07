@@ -52,13 +52,16 @@ def find_best_option(origin, hospitals):
     durations = result["durations"][0]  # first row → origin to others
     distances = result["distances"][0]
 
-    best_index = 1
-    best_time = durations[1]
+    best_index = None
+    best_time = float('inf')
 
-    for i in range(2, len(durations)):
-        if durations[i] < best_time:
+    for i in range(1, len(durations)):
+        if durations[i] is not None and durations[i] < best_time:
             best_time = durations[i]
             best_index = i
+
+    if best_index is None:
+        raise ValueError("No valid durations found. Unable to determine the best hospital.")
 
     best_hospital = hospitals[best_index - 1]
 

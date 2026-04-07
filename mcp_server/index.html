@@ -1,101 +1,708 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Sanjeevani MCP Chat</title>
-    <style>
-        body {
-            font-family: Arial;
-            background: #0f172a;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sanjeevani AI</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #3fb950;
+  --accent2: #58a6ff;
+  --warn: #d29922;
+  --danger: #f85149;
+  --radius: 10px;
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-        h1 {
-            margin-top: 20px;
-        }
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.logo { font-size: 20px; }
+header h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+header p  { font-size: 12px; color: var(--muted); }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  margin-left: auto;
+  box-shadow: 0 0 5px var(--accent);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1 } 50% { opacity:0.4 }
+}
 
-        #chatbox {
-            width: 600px;
-            height: 400px;
-            overflow-y: auto;
-            border: 1px solid #334155;
-            padding: 10px;
-            background: #020617;
-            margin-bottom: 10px;
-        }
+/* ── Layout ── */
+.main { display:flex; flex:1; overflow:hidden; }
 
-        .msg {
-            margin: 10px 0;
-        }
+/* ── Sidebar stage log ── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar h3 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.stage-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.stage-entry {
+  font-size: 12px;
+  padding: 5px 14px;
+  color: var(--muted);
+  border-left: 2px solid transparent;
+  transition: all 0.2s;
+}
+.stage-entry.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(63,185,80,0.06);
+}
+.stage-entry.done { color: #4d9a5e; }
 
-        .user {
-            color: #38bdf8;
-        }
+/* ── Chat area ── */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-behavior: smooth;
+}
 
-        .bot {
-            color: #22c55e;
-        }
+/* ── Messages ── */
+.msg {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.6;
+  animation: fadeUp 0.2s ease;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.msg.user {
+  align-self: flex-end;
+  background: #1f4a6e;
+  border: 1px solid #2a5f8f;
+  color: #cce5ff;
+}
+.msg.ai {
+  align-self: flex-start;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.msg .label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+.msg.user .label { color: #58a6ff; }
+.msg.ai .label   { color: var(--accent); }
 
-        input {
-            width: 500px;
-            padding: 10px;
-            border: none;
-        }
+/* ── Approval card ── */
+.approval-card {
+  align-self: flex-start;
+  background: var(--surface2);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 16px;
+  max-width: 480px;
+  animation: fadeUp 0.2s ease;
+}
+.approval-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--warn);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.proposal-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+  margin-bottom: 14px;
+}
+.proposal-table td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.proposal-table td:first-child { color: var(--muted); width: 45%; }
+.proposal-table td:last-child  { color: var(--text); font-weight: 500; }
+.approval-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.btn {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn.approve { background: var(--accent);  color: #0d1117; }
+.btn.reject  { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); }
+.map-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--accent2);
+  text-decoration: none;
+  margin-bottom: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent2);
+  border-radius: 5px;
+}
+.map-link:hover { background: rgba(88,166,255,0.08); }
 
-        button {
-            padding: 10px;
-            background: #22c55e;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
+/* ── Blockchain badge ── */
+.tx-badge {
+  align-self: flex-start;
+  background: rgba(63,185,80,0.08);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  max-width: 480px;
+  font-size: 13px;
+  animation: fadeUp 0.2s ease;
+}
+.tx-badge h4 { color: var(--accent); font-size: 13px; margin-bottom: 8px; }
+.tx-hash {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+  background: var(--surface);
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+
+/* ── Map modal ── */
+.map-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.map-overlay.open { display: flex; }
+.map-modal {
+  width: 780px;
+  max-width: 95vw;
+  height: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.map-modal-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  flex-shrink: 0;
+}
+.map-modal-header span { font-size: 14px; font-weight: 600; color: var(--accent); }
+.map-modal-header button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+.map-modal-header button:hover { color: var(--text); }
+.map-modal iframe { flex:1; border:none; width:100%; }
+
+/* ── Thinking indicator ── */
+.thinking {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 0;
+}
+.thinking-dots span {
+  display: inline-block;
+  width: 5px; height: 5px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: blink 1.2s infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink {
+  0%,80%,100% { opacity:0.2 } 40% { opacity:1 }
+}
+
+/* ── Input bar ── */
+.input-bar {
+  padding: 14px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+textarea {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: var(--font);
+  resize: none;
+  outline: none;
+  max-height: 120px;
+}
+textarea:focus { border-color: #58a6ff; }
+.send-btn {
+  background: var(--accent);
+  color: #0d1117;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  align-self: flex-end;
+}
+.send-btn:hover    { opacity: 0.85; }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Session info ── */
+.session-bar {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.session-bar button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.session-bar button:hover { color: var(--danger); border-color: var(--danger); }
+
+.msg pre, .msg code {
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(255,255,255,0.05);
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: pre-wrap;
+}
+.msg table { border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+.msg table td, .msg table th {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+}
+.msg table th { background: var(--surface); color: var(--muted); }
+</style>
 </head>
-
 <body>
 
-<h1>🚑 Sanjeevani MCP</h1>
+<header>
+  <div class="logo">🏥</div>
+  <div>
+    <h1>Sanjeevani AI</h1>
+    <p>Healthcare Logistics Orchestrator</p>
+  </div>
+  <div class="status-dot" title="Connected"></div>
+</header>
 
-<div id="chatbox"></div>
+<div class="main">
+  <!-- Sidebar: live stage notifications -->
+  <div class="sidebar">
+    <h3>⚡ Live Activity</h3>
+    <div class="stage-log" id="stageLog">
+      <div class="stage-entry" style="color:#555;padding:14px;font-size:11px;">
+        Activity will appear here during AI operations...
+      </div>
+    </div>
+  </div>
 
-<input id="input" placeholder="Ask something..." />
-<button onclick="send()">Send</button>
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="msg ai">
+        <div class="label">Sanjeevani AI</div>
+        Hello! I can help you find hospital equipment, arrange transfers, and manage logistics across your hospital network. How can I assist you today?
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <textarea
+        id="queryInput"
+        rows="1"
+        placeholder="Ask anything — find equipment, nearest hospital, create a loan..."
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+
+    <div class="session-bar">
+      <span>Session: <span id="sessionIdDisplay">—</span></span>
+      <button onclick="clearSession()">Clear session</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map modal -->
+<div class="map-overlay" id="mapOverlay">
+  <div class="map-modal">
+    <div class="map-modal-header">
+      <span>🗺️ Route Map</span>
+      <button onclick="closeMap()">✕</button>
+    </div>
+    <iframe id="mapIframe" src="" title="Route Map"></iframe>
+  </div>
+</div>
 
 <script>
-async function send() {
-    const input = document.getElementById("input");
-    const chatbox = document.getElementById("chatbox");
+const API_BASE = 'http://localhost:9001';
 
-    const message = input.value;
-    if (!message) return;
+let sessionId = null;
+let sseSource = null;
 
-    chatbox.innerHTML += `<div class="msg user">You: ${message}</div>`;
-
-    input.value = "";
-
-    try {
-        const res = await fetch("http://127.0.0.1:9001/chat", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ 
-            message,
-            hospital_id: "h1"   // 🔥 simulate logged-in hospital
-        })
-        });
-
-        const data = await res.json();
-
-        chatbox.innerHTML += `<div class="msg bot">AI: ${data.response}</div>`;
-        chatbox.scrollTop = chatbox.scrollHeight;
-
-    } catch (err) {
-        chatbox.innerHTML += `<div class="msg bot">⚠️ Error connecting to MCP</div>`;
-    }
+function getOrCreateSession() {
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    document.getElementById('sessionIdDisplay').textContent = sessionId.substring(0, 8) + '...';
+    startSSE();
+  }
+  return sessionId;
 }
-</script>
 
+// ── SSE: live stage notifications ─────────────────────────────────────────────
+function startSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource(`${API_BASE}/chat/stream/${sessionId}`);
+  sseSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.notification) addStageEntry(data.notification);
+  };
+}
+
+function addStageEntry(msg) {
+  const log = document.getElementById('stageLog');
+  // Mark previous as done
+  log.querySelectorAll('.stage-entry.active').forEach(el => {
+    el.classList.remove('active');
+    el.classList.add('done');
+  });
+  const entry = document.createElement('div');
+  entry.className = 'stage-entry active';
+  entry.textContent = msg;
+  // Remove placeholder
+  const placeholder = log.querySelector('[style]');
+  if (placeholder) placeholder.remove();
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Message rendering ──────────────────────────────────────────────────────────
+function addUserMessage(text) {
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'msg user';
+  el.innerHTML = `<div class="label">You</div>${escapeHtml(text)}`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function addAiMessage(text) {
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'msg ai';
+  // Basic markdown rendering: bold, tables, code
+  el.innerHTML = `<div class="label">Sanjeevani AI</div>` + renderMarkdown(text);
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  return el;
+}
+
+function showThinking() {
+  const msgs = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.className = 'thinking';
+  el.id = 'thinkingIndicator';
+  el.innerHTML = `
+    <div class="thinking-dots">
+      <span></span><span></span><span></span>
+    </div>
+    <span>Sanjeevani AI is working...</span>
+  `;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeThinking() {
+  const el = document.getElementById('thinkingIndicator');
+  if (el) el.remove();
+}
+
+// ── Approval card ──────────────────────────────────────────────────────────────
+function showApprovalCard(proposal, mapUrl) {
+  const msgs = document.getElementById('messages');
+  const card = document.createElement('div');
+  card.className = 'approval-card';
+
+  const mapLinkHtml = mapUrl
+    ? `<a class="map-link" href="#" onclick="openMap('${mapUrl}');return false;">
+        🗺️ View Route on Map
+       </a>`
+    : '';
+
+  const rows = [
+    ['Equipment',   `${proposal.quantity}x ${proposal.equipment_type}`],
+    ['From',        `${proposal.from_hospital_name} (${proposal.from_hospital_id})`],
+    ['Duration',    `${proposal.duration_hours} hours`],
+    ['Distance',    proposal.distance_km ? `${proposal.distance_km.toFixed(1)} km` : 'N/A'],
+    ['ETA',         proposal.eta_min ? `${Math.round(proposal.eta_min)} min` : 'N/A'],
+  ].map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+
+  card.innerHTML = `
+    <h3>⚠️ Loan Approval Required</h3>
+    ${mapLinkHtml}
+    <table class="proposal-table"><tbody>${rows}</tbody></table>
+    <div class="approval-btns">
+      <button class="btn approve" onclick="sendApproval('yes')">✓ Approve Loan</button>
+      <button class="btn reject"  onclick="sendApproval('no')">✕ Cancel</button>
+    </div>
+  `;
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── Blockchain badge ───────────────────────────────────────────────────────────
+function showTxBadge(txHash, loanId) {
+  const msgs = document.getElementById('messages');
+  const badge = document.createElement('div');
+  badge.className = 'tx-badge';
+  badge.innerHTML = `
+    <h4>⛓️ Loan Recorded On-Chain</h4>
+    <p style="font-size:12px;color:#8b949e;margin-bottom:6px;">Loan ID: <strong style="color:#e6edf3">#${loanId}</strong></p>
+    <div class="tx-hash">Tx: ${txHash}</div>
+  `;
+  msgs.appendChild(badge);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── Map dialog ─────────────────────────────────────────────────────────────────
+function openMap(mapUrl) {
+  const embedUrl = `${API_BASE}/map-dialog?map_url=${encodeURIComponent(mapUrl)}`;
+  document.getElementById('mapIframe').src = embedUrl;
+  document.getElementById('mapOverlay').classList.add('open');
+}
+function closeMap() {
+  document.getElementById('mapOverlay').classList.remove('open');
+  document.getElementById('mapIframe').src = '';
+}
+
+// ── Approval shortcut ──────────────────────────────────────────────────────────
+function sendApproval(decision) {
+  document.getElementById('queryInput').value = decision === 'yes'
+    ? 'Yes, I approve the loan. Please proceed.'
+    : 'No, cancel the loan.';
+  sendMessage();
+}
+
+// ── Core send ──────────────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input  = document.getElementById('queryInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const query  = input.value.trim();
+  if (!query) return;
+
+  const sid = getOrCreateSession();
+
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  addUserMessage(query);
+  showThinking();
+
+  // Clear stage log for new query
+  const log = document.getElementById('stageLog');
+  log.innerHTML = '';
+
+  try {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        query,
+        session_id: sid,
+        hospital_id: null   // set dynamically if needed
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    removeThinking();
+
+    // Mark all stage entries as done
+    log.querySelectorAll('.stage-entry.active').forEach(el => {
+      el.classList.remove('active');
+      el.classList.add('done');
+    });
+
+    // Show main reply
+    if (data.reply) addAiMessage(data.reply);
+
+    // Approval card
+    if (data.approval_required && data.loan_proposal) {
+      showApprovalCard(data.loan_proposal, data.map_url);
+    }
+
+    // Blockchain confirmation
+    if (data.tx_hash) {
+      showTxBadge(data.tx_hash, data.loan_id);
+    }
+
+  } catch (err) {
+    removeThinking();
+    addAiMessage(`⚠️ Error connecting to MCP server: ${err.message}`);
+    addStageEntry('❌ Request failed');
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+// ── Session management ─────────────────────────────────────────────────────────
+async function clearSession() {
+  if (sessionId) {
+    try {
+      await fetch(`${API_BASE}/session/${sessionId}`, {method:'DELETE'});
+    } catch {}
+  }
+  sessionId = null;
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  document.getElementById('messages').innerHTML = `
+    <div class="msg ai">
+      <div class="label">Sanjeevani AI</div>
+      Session cleared. How can I help you?
+    </div>`;
+  document.getElementById('stageLog').innerHTML = '';
+  document.getElementById('sessionIdDisplay').textContent = '—';
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Very lightweight markdown → HTML
+function renderMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
+    // Simple table detection (|col|col|)
+    .replace(/((\|.+\|\n?)+)/g, (match) => {
+      const rows = match.trim().split('\n').filter(r => r.includes('|'));
+      const html = rows.map((row, i) => {
+        const cells = row.split('|').filter(c => c.trim() !== '');
+        if (cells.every(c => /^[-:]+$/.test(c.trim()))) return '';
+        const tag = i === 0 ? 'th' : 'td';
+        return `<tr>${cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('')}</tr>`;
+      }).join('');
+      return `<table>${html}</table>`;
+    });
+}
+
+// Close map on overlay click
+document.getElementById('mapOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeMap();
+});
+</script>
 </body>
 </html>
