@@ -1,0 +1,177 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500&family=Noto+Sans+Bengali:wght@400;500&family=Noto+Sans+Tamil:wght@400;500&family=Noto+Sans+Telugu:wght@400;500&family=Noto+Sans+Kannada:wght@400;500&family=Noto+Sans+Malayalam:wght@400;500&family=Noto+Sans+Gujarati:wght@400;500&family=Noto+Sans+Gurmukhi:wght@400;500&family=Noto+Sans+Oriya:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 270 60% 6%;
+    --foreground: 320 50% 93%;
+
+    --card: 270 40% 12%;
+    --card-foreground: 320 50% 93%;
+
+    --popover: 270 40% 10%;
+    --popover-foreground: 320 50% 93%;
+
+    --primary: 280 30% 53%;
+    --primary-foreground: 320 50% 93%;
+
+    --secondary: 235 30% 53%;
+    --secondary-foreground: 320 50% 93%;
+
+    --muted: 270 30% 18%;
+    --muted-foreground: 280 20% 60%;
+
+    --accent: 300 40% 35%;
+    --accent-foreground: 320 50% 93%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 270 30% 20%;
+    --input: 270 30% 18%;
+    --ring: 280 50% 50%;
+
+    --radius: 0.75rem;
+
+    --glow-purple: 280 70% 60%;
+    --glow-blue: 235 60% 55%;
+    --glow-pink: 320 50% 88%;
+    --neon-purple: 280 100% 70%;
+
+    --glass-bg: 270 40% 12%;
+    --glass-border: 270 30% 25%;
+
+    --sidebar-background: 270 40% 8%;
+    --sidebar-foreground: 320 50% 93%;
+    --sidebar-primary: 280 30% 53%;
+    --sidebar-primary-foreground: 320 50% 93%;
+    --sidebar-accent: 270 30% 18%;
+    --sidebar-accent-foreground: 320 50% 93%;
+    --sidebar-border: 270 30% 20%;
+    --sidebar-ring: 280 50% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-2xl border;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--glass-bg) / 0.25) 0%,
+      hsl(var(--glass-bg) / 0.12) 50%,
+      hsl(var(--glass-bg) / 0.18) 100%
+    );
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border-color: hsl(var(--glow-pink) / 0.12);
+    box-shadow: 
+      0 8px 32px hsl(var(--glow-purple) / 0.10),
+      0 0 0 1px hsl(var(--glow-pink) / 0.06) inset,
+      0 1px 0 hsl(var(--glow-pink) / 0.15) inset,
+      0 -1px 0 hsl(var(--glow-purple) / 0.05) inset;
+  }
+
+  .glass-panel-strong {
+    @apply rounded-2xl border;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--glass-bg) / 0.40) 0%,
+      hsl(var(--glass-bg) / 0.20) 50%,
+      hsl(var(--glass-bg) / 0.30) 100%
+    );
+    backdrop-filter: blur(40px) saturate(1.8);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border-color: hsl(var(--glow-pink) / 0.18);
+    box-shadow: 
+      0 8px 40px hsl(var(--glow-purple) / 0.15),
+      0 0 0 1px hsl(var(--glow-pink) / 0.08) inset,
+      0 1px 0 hsl(var(--glow-pink) / 0.20) inset,
+      0 -1px 0 hsl(var(--glow-purple) / 0.08) inset;
+  }
+
+  .glass-screen {
+    @apply rounded-3xl border;
+    background: linear-gradient(
+      160deg,
+      hsl(var(--background) / 0.60) 0%,
+      hsl(var(--glass-bg) / 0.30) 40%,
+      hsl(var(--background) / 0.50) 100%
+    );
+    backdrop-filter: blur(48px) saturate(1.4);
+    -webkit-backdrop-filter: blur(48px) saturate(1.4);
+    border-color: hsl(var(--glow-pink) / 0.10);
+    box-shadow: 
+      0 16px 64px hsl(var(--glow-purple) / 0.12),
+      0 0 0 1px hsl(var(--glow-pink) / 0.05) inset,
+      0 2px 0 hsl(var(--glow-pink) / 0.10) inset;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px hsl(var(--glow-purple) / 0.6),
+                 0 0 40px hsl(var(--glow-purple) / 0.3);
+  }
+
+  .glow-border {
+    box-shadow: 0 0 15px hsl(var(--glow-purple) / 0.3),
+                0 0 30px hsl(var(--glow-purple) / 0.1);
+  }
+
+  .btn-glow {
+    @apply relative overflow-hidden rounded-lg font-display font-semibold tracking-wider uppercase text-sm;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--secondary)));
+    box-shadow: 0 0 20px hsl(var(--glow-purple) / 0.4),
+                0 0 40px hsl(var(--glow-purple) / 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-glow:hover {
+    box-shadow: 0 0 30px hsl(var(--glow-purple) / 0.6),
+                0 0 60px hsl(var(--glow-purple) / 0.3);
+    transform: translateY(-1px);
+  }
+
+  .pulse-node {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 10px hsl(var(--glow-purple) / 0.4);
+    opacity: 0.8;
+  }
+  50% { 
+    box-shadow: 0 0 25px hsl(var(--glow-purple) / 0.7);
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
