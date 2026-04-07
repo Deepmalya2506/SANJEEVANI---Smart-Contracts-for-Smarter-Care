@@ -73,7 +73,14 @@ def safe_request(method: str, url: str, **kwargs) -> dict:
 
     except Exception as e:
         return {"error": str(e)}
+    
+def get_hospital_by_id(hospital_id: str):
+    return hospital_collection.find_one({"id": hospital_id})
 
+EQUIPMENT_MAP = {
+    "oxygen": 1,
+    "ventilator": 2
+}
 
 # ─────────────────────────────────────────────
 # TOOL DEFINITIONS
@@ -84,22 +91,14 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_inventory",
-            "description": (
-                "Search hospitals for a specific equipment type and minimum quantity. "
-                "Pass hospital_id='all' to search across ALL hospitals. "
-                "Returns list of hospitals that have the item available."
-            ),
+            "description": ( "Search hospitals for a specific equipment type and minimum quantity. " "Pass hospital_id='all' to search across ALL hospitals. " "Returns list of hospitals that have the item available." ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "hospital_id": {
-                        "type": "string",
-                        "description": "Hospital ID to search, or 'all' for all hospitals"
-                    },
-                    "equipment_type": {"type": "string"},
-                    "quantity": {"type": "integer", "description": "Minimum quantity needed"}
+                    "equipment_type": {"type": "integer"},
+                    "quantity": {"type": "integer"}
                 },
-                "required": ["hospital_id", "equipment_type", "quantity"]
+                "required": ["equipment_type", "quantity"]
             }
         }
     },
@@ -327,11 +326,18 @@ TOOLS = [
 # TOOL EXECUTOR
 # ─────────────────────────────────────────────
 
-def execute_tool(name: str, args: dict, hospital_id: str = None) -> dict:
+def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str = None) -> dict:
 
     # ── Inventory / Backend ──────────────────────────────────────────────
     if name == "search_inventory":
-        return safe_request("GET", "http://localhost:8000/inventory/search", params=args)
+        return safe_request(
+            "GET",
+            "http://localhost:8000/inventory/search",
+            params={
+                "equipment_type": int(args["equipment_type"]),
+                "quantity": args["quantity"]
+            }
+        )
 
     if name == "get_hospitals":
         return safe_request("GET", "http://localhost:8000/hospitals")
@@ -342,31 +348,48 @@ def execute_tool(name: str, args: dict, hospital_id: str = None) -> dict:
     # ── GIS ──────────────────────────────────────────────────────────────
     if name == "find_nearest_hospitals":
         hospitals = safe_request("GET", "http://localhost:8000/hospitals")
+
         if "error" in hospitals:
             return hospitals
 
         gis_input = [
-            {"id": h["id"], "lat": h["location"]["lat"], "lon": h["location"]["lon"]}
+            {
+                "id": h["id"],
+                "lat": h["location"]["lat"],
+                "lon": h["location"]["lon"]
+            }
             for h in hospitals
         ]
-        return safe_request(
+
+        res = safe_request(
             "POST",
             "http://localhost:8001/gis/best-option",
-            json={"origin": args, "hospitals": gis_input}
+            json={
+                "origin": args,
+                "hospitals": gis_input
+            }
         )
+
+        return res.get("data", res)   # 🔥 CRITICAL FIX
 
     if name == "get_route":
         return safe_request("POST", "http://localhost:8001/gis/route", json=args)
 
     if name == "get_route_map_url":
-        # Returns a URL — your GIS server renders the HTML map at /gis/route-map
-        # We expose that URL to the frontend so it can open it in the map dialog
-        params = (
-            f"origin_lat={args['origin_lat']}&origin_lon={args['origin_lon']}"
-            f"&dest_lat={args['dest_lat']}&dest_lon={args['dest_lon']}"
+        return safe_request(
+            "POST",
+            "http://localhost:8001/gis/route-map",
+            json={
+                "source": {
+                    "lat": args["origin_lat"],
+                    "lon": args["origin_lon"]
+                },
+                "destination": {
+                    "lat": args["dest_lat"],
+                    "lon": args["dest_lon"]
+                }
+            }
         )
-        url = f"http://localhost:8001/gis/route-map?{params}"
-        return {"map_url": url, "embed_url": url}
 
     if name == "get_isochrone":
         return safe_request("POST", "http://localhost:8001/gis/isochrone", json=args)
@@ -377,21 +400,14 @@ def execute_tool(name: str, args: dict, hospital_id: str = None) -> dict:
 
     # ── Approval gate ────────────────────────────────────────────────────
     if name == "request_user_approval":
-        # Store the pending approval payload so the API can return it
-        # and the frontend can render the approval card + map dialog
+        _pending_approvals[session_id] = args
+
         return {
             "approval_required": True,
             "loan_proposal": args,
-            "message": (
-                f"📋 **Loan Proposal Ready**\n"
-                f"• Equipment: {args.get('quantity')}x {args.get('equipment_type')}\n"
-                f"• From: {args.get('from_hospital_name')} ({args.get('from_hospital_id')})\n"
-                f"• Duration: {args.get('duration_hours')} hours\n"
-                f"• Distance: {args.get('distance_km', 'N/A')} km  |  ETA: {args.get('eta_min', 'N/A')} min\n\n"
-                "**Please reply 'yes' / 'approve' to confirm, or 'no' / 'cancel' to abort.**"
-            )
+            "message": "Awaiting approval..."
         }
-
+    
     # ── Blockchain ───────────────────────────────────────────────────────
     if name == "create_blockchain_loan":
         return create_loan_on_chain(
@@ -473,19 +489,46 @@ def run_agent(
     user_query: str,
     session_id: str,
     hospital_id: str = None,
-    notify: Callable[[str], None] = None,  # SSE progress callback
-) -> dict:
-    """
-    Returns:
-      {
-        "reply": str,           # assistant text
-        "approval_required": bool,
-        "loan_proposal": dict | None,
-        "map_url": str | None,
-        "tx_hash": str | None,
-        "loan_id": int | None,
-      }
-    """
+    notify: Callable[[str], None] = None) -> dict:
+
+    
+    # 🔥 APPROVAL HANDLING
+    if session_id in _pending_approvals:
+        if user_query.lower() in ["yes", "approve", "confirm"]:
+            approval = _pending_approvals.pop(session_id)
+
+            from_hospital = get_hospital_by_id(approval["from_hospital_id"])
+            to_hospital   = get_hospital_by_id(hospital_id)
+
+            loc = get_hospital_location(hospital_id)
+
+            # dispatch
+            dispatch_result = execute_tool("dispatch", {
+                "equipment_type": approval["equipment_type"],
+                "quantity": approval["quantity"],
+                "from_hospital_id": approval["from_hospital_id"],
+                "to_hospital_id": hospital_id,
+                "location": {
+                    "lat": loc["lat"],
+                    "lon": loc["lon"]
+                }
+            }, hospital_id, session_id)
+
+            # blockchain
+            loan_result = execute_tool("create_blockchain_loan", {
+                "lender_wallet": from_hospital["wallet"],   # ✅ FIXED
+                "equipment_id": 1,
+                "quantity": approval["quantity"],
+                "duration_hours": approval["duration_hours"],
+                "borrower_wallet": to_hospital["wallet"]    # ✅ FIXED
+            }, hospital_id, session_id)
+
+            return {
+                "reply": "✅ Loan approved and created successfully",
+                "tx_hash": loan_result.get("tx_hash"),
+                "loan_id": loan_result.get("loan_id")
+            }
+  
 
     def emit(msg: str):
         if notify:
@@ -583,7 +626,7 @@ def run_agent(
             print(f"\n🛠  TOOL: {tool_name}")
             print(f"    ARGS: {json.dumps(args, indent=2)}")
 
-            tool_result = execute_tool(tool_name, args, hospital_id)
+            tool_result = execute_tool(tool_name, args, hospital_id, session_id)
 
             print(f"    RESULT: {json.dumps(tool_result, indent=2)[:400]}")
 
@@ -605,7 +648,7 @@ def run_agent(
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(tool_result)
+                "content": json.dumps(tool_result, default=str)
             })
 
             # ── Hard stop: approval required — return immediately ────────
