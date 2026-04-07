@@ -77,10 +77,6 @@ def safe_request(method: str, url: str, **kwargs) -> dict:
 def get_hospital_by_id(hospital_id: str):
     return hospital_collection.find_one({"id": hospital_id})
 
-EQUIPMENT_MAP = {
-    "oxygen": 1,
-    "ventilator": 2
-}
 
 # ─────────────────────────────────────────────
 # TOOL DEFINITIONS
@@ -318,6 +314,20 @@ TOOLS = [
                 "required": ["loan_id"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "upload_inventory_csv",
+            "description": "Upload a CSV file to populate hospital inventory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"}
+                },
+                "required": ["file_path"]
+            }
+        }
     }
 ]
 
@@ -329,6 +339,16 @@ TOOLS = [
 def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str = None) -> dict:
 
     # ── Inventory / Backend ──────────────────────────────────────────────
+
+    if name == "upload_inventory_csv":
+        files = {"file": open(args["file_path"], "rb")}
+
+        return safe_request(
+            "POST",
+            "http://localhost:8000/inventory/upload",
+            files=files
+        )
+
     if name == "search_inventory":
         return safe_request(
             "GET",
@@ -373,10 +393,17 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         return res.get("data", res)   # 🔥 CRITICAL FIX
 
     if name == "get_route":
-        return safe_request("POST", "http://localhost:8001/gis/route", json=args)
+        return safe_request(
+            "POST",
+            "http://localhost:8001/gis/route",
+            json={
+                "source": args["origin"],   # 🔥 FIX
+                "destination": args["destination"]
+            }
+        )
 
     if name == "get_route_map_url":
-        return safe_request(
+        res = safe_request(
             "POST",
             "http://localhost:8001/gis/route-map",
             json={
@@ -390,6 +417,11 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
                 }
             }
         )
+
+        if "map_file" in res:
+            res["map_url"] = f"http://localhost:8001/{res['map_file']}"  # 🔥 FIX
+
+        return res
 
     if name == "get_isochrone":
         return safe_request("POST", "http://localhost:8001/gis/isochrone", json=args)
@@ -435,6 +467,11 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
 # ─────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are Sanjeevani AI — a healthcare logistics orchestrator for a B2B hospital equipment-sharing platform backed by Ethereum smart contracts.
+
+### Equipment-mapping:
+equipment | equipment_type
+Oxygen-Cylinder: 1
+Ventilator: 2
 
 ## Your capabilities
 - search_inventory        → which hospitals have item X
@@ -536,7 +573,7 @@ def run_agent(
         print(f"  📢 {msg}")
 
     # ── Inject caller location once per session ─────────────────────────
-    messages = get_session(session_id)
+    messages = get_session(session_id)[-10:]
 
     contextual_query = user_query
     if hospital_id:
@@ -602,6 +639,20 @@ def run_agent(
 
             try:
                 args = json.loads(tool_call.function.arguments)
+
+                # 🔥 FIX: enforce correct schema BEFORE tool execution
+                if tool_call.function.name == "request_user_approval":
+
+                    if "duration_hours" in args:
+                        # convert float → int, minimum 1 hour
+                        args["duration_hours"] = max(1, int(round(args["duration_hours"])))
+
+                    if "eta_min" in args:
+                        args["eta_min"] = int(round(args["eta_min"]))
+
+                    if "distance_km" in args:
+                        args["distance_km"] = round(args["distance_km"], 2)
+                
             except json.JSONDecodeError:
                 args = {}
 
@@ -645,10 +696,32 @@ def run_agent(
                 result_meta["loan_id"] = tool_result.get("loan_id")
 
             # ── Append tool result to history ────────────────────────────
+            def compress_tool_output(tool_name, result):
+                if isinstance(result, dict):
+
+                    # 🔥 remove heavy geometry
+                    if "geometry" in str(result):
+                        result = {
+                            "summary": "Route computed successfully"
+                        }
+
+                    # 🔥 trim GIS results
+                    if "all_options" in result:
+                        result["all_options"] = result["all_options"][:2]
+
+                    # 🔥 trim hospitals
+                    if isinstance(result, list) and len(result) > 3:
+                        return result[:3]
+
+                return result
+
+
+            compressed_result = compress_tool_output(tool_name, tool_result)
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(tool_result, default=str)
+                "content": json.dumps(compressed_result, default=str)
             })
 
             # ── Hard stop: approval required — return immediately ────────
