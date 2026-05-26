@@ -1,0 +1,15 @@
+PRIVATE_Local_Depoyed_address_KEY=0x47c99abed3324a2707c28affff1267e45918ec8c3f20b8aa892e8b065d2942dd
+SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/08011744295b4cd68af61893502eecda
+INFURA_API_KEY=08011744295b4cd68af61893502eecda
+Acc1_Eth_pvt_key=f3cb371b264b65d44b6a77c253eb21b7398b09c795e23ea6e29c66cc3bc021c0
+
+
+
+Guides to terminal
+uvicorn GIS_engine.main:app --port 8001 --reload   -> for GIS_engine
+uvicorn mcp_server.wrapper:app --port 9001         -> for mcp_server
+uvicorn app.main:app --reload                      -> for backend
+
+npx hardhat compile                                     -> for inital smart_contract compilation and artifacts , cache creation (one-time)
+npx hardhat run scripts/deploy.ts --network localhost   -> for deployement to local ganache server at RPC:7545 
+npx hardhat node                                        -> for active blockchain server
