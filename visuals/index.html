@@ -1,0 +1,2507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sanjeevani — Smart Contracts for Smarter Healthcare</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS (unchanged + minor additions)
+═══════════════════════════════════════════ */
+:root {
+  --bg0: #08080c;
+  --bg1: #0e0e16;
+  --bg2: #14141f;
+  --bg3: #1c1c2e;
+  --bg4: #22223a;
+  --border: rgba(139,92,246,0.15);
+  --border2: rgba(139,92,246,0.3);
+  --purple: #8b5cf6;
+  --purple2: #a855f7;
+  --purple3: #c084fc;
+  --purple-glow: rgba(139,92,246,0.35);
+  --text: #f1f0f8;
+  --text2: #9b99b8;
+  --text3: #5c5a78;
+  --green: #10b981;
+  --radius: 10px;
+  --radius-lg:16px;
+  --font-head: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+/* ═══════════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════════ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg0);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--font-body); }
+input, textarea, select { font-family: var(--font-body); }
+::selection { background: var(--purple); color: #fff; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════
+   SCREENS ROUTER
+═══════════════════════════════════════════ */
+.screen { display:none; min-height:100vh; animation: fadeIn 0.3s ease; }
+.screen.active { display:flex; flex-direction:column; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ═══════════════════════════════════════════
+   SHARED COMPONENTS
+═══════════════════════════════════════════ */
+
+/* Logo */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.logo-icon {
+  width: 34px; height: 34px;
+  background: var(--purple);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.logo-icon svg { width:18px; height:18px; stroke: white; fill:none; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--purple);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--purple2); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(139,92,246,0.35); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { background: var(--purple-dim); color: var(--text); border-color: var(--purple); }
+.btn-danger {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-sm { padding: 7px 14px; font-size: 12px; }
+.btn-lg { padding: 14px 28px; font-size: 15px; font-weight: 600; }
+
+/* Inputs */
+.input-wrap { position: relative; }
+.input-wrap .icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text3); width:16px; height:16px; }
+input[type=text], input[type=email], input[type=password], textarea {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 14px 11px 38px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus { border-color: var(--purple); background: var(--bg4); }
+input::placeholder, textarea::placeholder { color: var(--text3); }
+textarea { resize: none; padding-top: 14px; line-height: 1.5; }
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.badge::before { content:''; width:6px; height:6px; border-radius:50%; }
+.badge-online  { background: var(--green-dim); color: var(--green); }
+.badge-online::before { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.badge-syncing { background: rgba(6,182,212,0.12); color: var(--cyan); }
+.badge-syncing::before { background: var(--cyan); animation: pulseBadge 1.2s infinite; }
+.badge-offline { background: var(--red-dim); color: var(--red); }
+.badge-offline::before { background: var(--red); }
+@keyframes pulseBadge { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Card */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+.card:hover { border-color: var(--border2); }
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text3);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  margin: 16px 0;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ═══════════════════════════════════════════
+   APP SHELL (Authenticated layout)
+═══════════════════════════════════════════ */
+#app-shell {
+  display: none;
+  height: 100vh;
+  overflow: hidden;
+}
+#app-shell.active { display: flex; }
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 12px;
+  gap: 6px;
+}
+.sidebar .logo { padding: 0 8px 16px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  padding: 12px 8px 4px;
+  text-transform: uppercase;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.nav-item:hover { background: var(--purple-dim); color: var(--text); }
+.nav-item.active { background: var(--purple-dim); color: var(--purple3); border-color: var(--border2); }
+.nav-item svg { width:15px; height:15px; flex-shrink:0; }
+
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.server-health {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.server-health .label { color: var(--text3); margin-bottom: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+.server-health .value { color: var(--green); display: flex; align-items: center; gap: 5px; }
+.server-health .value::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); }
+
+.usage-bar-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.usage-bar-wrap .label { font-size: 11px; color: var(--text3); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+.usage-track { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+.usage-fill  { height: 100%; background: var(--purple); border-radius: 2px; transition: width 0.5s ease; }
+.usage-bar-wrap .nums { font-size: 11px; color: var(--text2); margin-top: 5px; }
+
+.sign-out-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--red);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sign-out-btn:hover { background: var(--red-dim); }
+.sign-out-btn svg { width:14px; height:14px; }
+
+/* Main content area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg0);
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+  flex-shrink: 0;
+}
+.search-wrap { flex: 1; max-width: 380px; position: relative; }
+.search-wrap svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:var(--text3); }
+.search-wrap input { padding-left: 36px; background: var(--bg2); }
+.topbar-right { display:flex; align-items:center; gap:12px; margin-left:auto; }
+.notif-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.notif-btn svg { width:16px; height:16px; color:var(--text2); }
+.notif-dot {
+  position:absolute; top:6px; right:6px;
+  width:7px; height:7px;
+  background: var(--red);
+  border-radius:50%;
+  border: 2px solid var(--bg1);
+}
+.avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--purple2));
+  display: grid;
+  place-items: center;
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  border: 2px solid var(--border2);
+}
+
+/* Sub-views within app shell */
+.view { display:none; flex:1; overflow-y:auto; padding:28px 28px; animation: fadeIn 0.25s ease; }
+.view.active { display:block; }
+
+/* ═══════════════════════════════════════════
+   SCREEN 1: LANDING PAGE
+═══════════════════════════════════════════ */
+#landing {
+  background: var(--bg0);
+}
+
+/* Nav */
+.land-nav {
+  display: flex;
+  align-items: center;
+  padding: 18px 60px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(8,8,12,0.9);
+  backdrop-filter: blur(12px);
+}
+.land-nav .logo { font-size: 20px; }
+.land-nav-links {
+  display: flex;
+  gap: 32px;
+  margin: 0 auto;
+  font-size: 13.5px;
+  color: var(--text2);
+}
+.land-nav-links a:hover { color: var(--text); }
+.land-nav-right { display:flex; gap:10px; }
+
+/* Hero */
+.hero {
+  padding: 100px 60px 80px;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+  position: relative;
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--purple-dim);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: var(--purple3);
+  margin-bottom: 28px;
+}
+.hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--purple); box-shadow:0 0 6px var(--purple); }
+.hero h1 {
+  font-family: var(--font-head);
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 800;
+  line-height: 1.0;
+  letter-spacing: -0.03em;
+  margin-bottom: 22px;
+}
+.hero h1 em { color: var(--purple3); font-style: normal; }
+.hero p {
+  font-size: 17px;
+  color: var(--text2);
+  max-width: 580px;
+  margin: 0 auto 36px;
+  line-height: 1.7;
+}
+.hero-btns { display:flex; gap:14px; justify-content:center; }
+
+/* Ambient glow */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 300px;
+  background: radial-gradient(ellipse, rgba(139,92,246,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Feature pills */
+.feature-strip {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 60px 60px;
+  flex-wrap: wrap;
+}
+.feature-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  padding: 10px 20px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.feature-pill .pill-icon {
+  width: 28px; height: 28px;
+  background: var(--purple-dim);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.feature-pill svg { width: 13px; height: 13px; color: var(--purple3); }
+.feature-pill strong { color: var(--text); font-weight: 500; }
+
+/* Features grid */
+.features-section {
+  padding: 80px 60px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: var(--purple3); text-transform: uppercase; margin-bottom: 14px; }
+.section-title {
+  font-family: var(--font-head);
+  font-size: clamp(28px, 3.5vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 14px;
+}
+.section-sub { font-size: 15px; color: var(--text2); max-width: 500px; line-height: 1.7; margin-bottom: 50px; }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.feature-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  transition: all 0.2s;
+}
+.feature-card:hover { border-color: var(--border2); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(139,92,246,0.12); }
+.feature-card .f-icon {
+  width: 42px; height: 42px;
+  background: var(--purple-dim);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+}
+.feature-card .f-icon svg { width:20px; height:20px; color:var(--purple3); }
+.feature-card h3 { font-family: var(--font-head); font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.feature-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+/* Topology preview */
+.topology-section {
+  padding: 60px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.topology-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.topology-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.topology-header .dots { display:flex; gap:6px; }
+.topology-header .dot { width:10px; height:10px; border-radius:50%; }
+.topology-header .dot:nth-child(1) { background: var(--red); }
+.topology-header .dot:nth-child(2) { background: var(--amber); }
+.topology-header .dot:nth-child(3) { background: var(--green); }
+.topology-header .title { font-size: 12px; color: var(--text3); letter-spacing: 0.06em; font-family: monospace; }
+.topology-body {
+  padding: 30px;
+  display: flex;
+  gap: 24px;
+}
+.topo-sidebar { width: 160px; flex-shrink: 0; }
+.topo-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+.topo-nav-item.active { background: var(--purple-dim); color: var(--purple3); }
+.topo-nav-item svg { width: 12px; height: 12px; }
+.topo-map {
+  flex: 1;
+  height: 220px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.topo-map-title { font-size: 14px; font-weight: 600; padding: 14px 16px 0; }
+.topo-map-sub   { font-size: 11px; color: var(--text3); padding: 2px 16px; }
+.topo-node {
+  position: absolute;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg3);
+}
+.topo-node-purple { background: var(--purple); box-shadow: 0 0 10px var(--purple); }
+.topo-node-cyan   { background: var(--cyan);   box-shadow: 0 0 10px var(--cyan); }
+.topo-node-green  { background: var(--green);  box-shadow: 0 0 10px var(--green); }
+.topo-stats {
+  position: absolute;
+  bottom: 12px; right: 12px;
+  display: flex;
+  gap: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+.topo-stat .ts-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
+.topo-stat .ts-val   { font-size: 16px; font-weight: 700; font-family: var(--font-head); color: var(--text); }
+
+/* Testimonial */
+.testimonial-section {
+  text-align: center;
+  padding: 80px 60px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.testimonial-section blockquote {
+  font-size: 18px;
+  color: var(--text2);
+  line-height: 1.8;
+  font-style: italic;
+  margin-bottom: 24px;
+  position: relative;
+}
+.testimonial-section blockquote::before { content: '"'; font-size: 60px; color: var(--purple); opacity: 0.3; position: absolute; top: -20px; left: -20px; font-family: Georgia, serif; line-height: 1; }
+.avatars-row { display:flex; justify-content:center; margin-bottom: 14px; }
+.avatars-row .av { width:32px; height:32px; border-radius:50%; border:2px solid var(--bg0); margin-left:-8px; }
+.avatars-row .av:first-child { margin-left:0; }
+.av-1 { background: linear-gradient(135deg,#667eea,#764ba2); }
+.av-2 { background: linear-gradient(135deg,#f093fb,#f5576c); }
+.av-3 { background: linear-gradient(135deg,#4facfe,#00f2fe); }
+.cta-section {
+  text-align: center;
+  padding: 80px 60px;
+  background: var(--bg1);
+}
+.cta-section h2 { font-family: var(--font-head); font-size: 36px; font-weight: 700; margin-bottom: 14px; }
+.cta-section p  { color: var(--text2); margin-bottom: 28px; }
+.cta-sub { font-size: 12px; color: var(--text3); margin-top: 12px; }
+.land-footer {
+  border-top: 1px solid var(--border);
+  padding: 24px 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text3);
+}
+.land-footer .logo { font-size: 15px; }
+.land-footer-links { display:flex; gap:24px; }
+.land-footer-links a:hover { color: var(--text2); }
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--green);
+}
+.status-chip::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); }
+
+/* ═══════════════════════════════════════════
+   SCREEN 2: LOGIN
+═══════════════════════════════════════════ */
+#login {
+  background: var(--bg0);
+  min-height: 100vh;
+}
+.login-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: center;
+  gap: 0;
+  padding: 40px;
+  gap: 60px;
+}
+.login-left {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 48px 44px;
+  position: relative;
+  overflow: hidden;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+}
+.login-left::before {
+  content: '';
+  position: absolute;
+  bottom: -60px; left: -60px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+.login-left .logo { margin-bottom: 44px; }
+.login-left h2 {
+  font-family: var(--font-head);
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  margin-bottom: 16px;
+}
+.login-left h2 em { color: var(--purple3); font-style: normal; display: block; }
+.login-left p { font-size: 14px; color: var(--text2); line-height: 1.7; max-width: 340px; }
+.login-left .security-badge {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.sec-icon { width: 38px; height: 38px; background: var(--purple-dim); border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; }
+.sec-icon svg { width: 18px; height: 18px; color: var(--purple3); }
+.security-badge h4 { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.security-badge p  { font-size: 11px; color: var(--text2); }
+.trusted-line { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 16px; }
+
+/* Login form */
+.login-right { padding: 20px 0; }
+.login-tabs {
+  display: flex;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 28px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 9px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text3);
+  transition: all 0.15s;
+}
+.tab-btn.active { background: var(--bg4); color: var(--text); }
+.login-right h2 { font-family: var(--font-head); font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+.login-right p  { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+
+.oauth-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom: 4px; }
+.oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 11px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.oauth-btn:hover { background: var(--bg4); border-color: var(--border2); }
+.oauth-btn svg { width: 15px; height: 15px; }
+
+.form-row { margin-bottom: 16px; }
+.form-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 7px;
+}
+.form-label a { color: var(--purple3); font-size: 12px; }
+.form-label a:hover { color: var(--purple2); }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 20px;
+}
+input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--purple); cursor: pointer; }
+
+.btn-full { width: 100%; justify-content: center; padding: 13px; font-size: 15px; font-weight: 600; }
+.hipaa-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--green);
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: var(--green-dim);
+  border-radius: 8px;
+}
+.hipaa-badge svg { width: 14px; height: 14px; flex-shrink: 0; }
+.hipaa-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.live-support {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 24px;
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  transition: all 0.15s;
+}
+.live-support:hover { background: var(--bg3); }
+.live-support .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); }
+
+/* ═══════════════════════════════════════════
+   VIEW: DASHBOARD
+═══════════════════════════════════════════ */
+.dash-header { margin-bottom: 24px; }
+.dash-header h1 { font-family: var(--font-head); font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.dash-header p  { font-size: 13px; color: var(--text2); }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  transition: all 0.2s;
+}
+.stat-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+.stat-card .sc-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.stat-card .sc-value { font-family: var(--font-head); font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+.stat-card .sc-delta { font-size: 12px; color: var(--green); }
+.stat-card .sc-delta.neg { color: var(--red); }
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+.chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.chart-tabs { display:flex; gap:12px; margin-bottom:16px; }
+.chart-tab { font-size: 12px; color: var(--text3); cursor: pointer; padding: 4px 0; border-bottom: 2px solid transparent; }
+.chart-tab.active { color: var(--purple3); border-bottom-color: var(--purple); }
+
+/* SVG Chart styles */
+.chart-bar-wrap { height: 180px; display:flex; align-items:flex-end; gap:8px; padding-top: 10px; }
+.chart-bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
+.chart-bar { width:100%; background: var(--purple-dim); border-radius: 4px 4px 0 0; border: 1px solid var(--border2); transition: all 0.3s; position: relative; }
+.chart-bar:hover { background: var(--purple); cursor: pointer; }
+.chart-bar-label { font-size: 10px; color: var(--text3); }
+
+/* Activity feed */
+.activity-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+.activity-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.activity-item:last-child { border-bottom: none; }
+.act-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.act-text { font-size: 12.5px; color: var(--text2); flex:1; line-height: 1.5; }
+.act-text strong { color: var(--text); font-weight: 500; }
+.act-time { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════
+   VIEW: MCP CLIENT (CHAT)
+═══════════════════════════════════════════ */
+.mcp-shell {
+  display: flex;
+  height: calc(100vh - 57px);
+  gap: 0;
+  margin: -28px;
+}
+.mcp-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+}
+.mcp-sidebar .new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--purple-dim);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--purple3);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  transition: all 0.15s;
+}
+.mcp-sidebar .new-chat-btn:hover { background: rgba(139,92,246,0.2); }
+.mcp-sidebar .new-chat-btn svg { width:14px; height:14px; }
+.history-label { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; padding: 0 4px; margin-bottom: 8px; }
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.12s;
+  margin-bottom: 2px;
+}
+.history-item:hover { background: var(--purple-dim); color: var(--text); }
+.history-item.active { background: var(--purple-dim); color: var(--purple3); }
+.history-item svg { width:13px; height:13px; flex-shrink: 0; }
+.mcp-user-row {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+.mcp-user-row .av { width: 30px; height: 30px; background: var(--purple); border-radius: 50%; display:grid; place-items:center; font-size:12px; font-weight:700; color:#fff; flex-shrink:0; }
+.mcp-user-info h4 { font-size: 13px; font-weight: 500; }
+.mcp-user-info p  { font-size: 11px; color: var(--purple3); }
+
+/* Chat main */
+.mcp-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mcp-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mcp-topbar-title { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+.mcp-topbar-title svg { width:15px; height:15px; }
+.mcp-topbar-actions { display: flex; gap: 8px; }
+.icon-btn { width:32px; height:32px; background:var(--bg2); border:1px solid var(--border); border-radius:7px; display:grid; place-items:center; cursor:pointer; }
+.icon-btn:hover { border-color: var(--border2); }
+.icon-btn svg { width:14px; height:14px; color: var(--text2); }
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Welcome state */
+.chat-welcome { text-align: center; padding: 30px 0; }
+.chat-welcome-icon {
+  width: 56px; height: 56px;
+  background: var(--purple-dim);
+  border: 2px solid var(--border2);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+}
+.chat-welcome-icon svg { width: 26px; height: 26px; color: var(--purple3); }
+.chat-welcome h3 { font-family: var(--font-head); font-size: 16px; font-weight: 600; color: var(--purple3); margin-bottom: 10px; }
+.chat-welcome p  { font-size: 13.5px; color: var(--text2); max-width: 480px; margin: 0 auto 24px; line-height: 1.7; }
+.suggestion-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.suggestion-pill {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 12.5px;
+  color: var(--text2);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.suggestion-pill:hover { background: var(--purple-dim); border-color: var(--border2); color: var(--text); }
+
+/* Message bubbles */
+.chat-msg { display: flex; flex-direction: column; max-width: 72%; }
+.chat-msg.user { align-self: flex-end; }
+.chat-msg.ai   { align-self: flex-start; }
+.msg-sender { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+.chat-msg.ai   .msg-sender { color: var(--purple3); display: flex; align-items: center; gap: 6px; }
+.chat-msg.user .msg-sender { color: var(--text3); text-align: right; }
+.msg-sender .sender-icon { width: 16px; height: 16px; background: var(--purple-dim); border-radius: 4px; display:grid; place-items:center; }
+.msg-sender .sender-icon svg { width: 9px; height: 9px; color: var(--purple3); }
+.msg-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+.chat-msg.ai   .msg-bubble { background: var(--bg3); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.chat-msg.user .msg-bubble { background: var(--purple); color: #fff; border-bottom-right-radius: 4px; }
+
+/* Typing indicator */
+.typing-indicator { display:flex; align-items:center; gap:5px; padding: 12px 16px; }
+.typing-dot { width:6px; height:6px; border-radius:50%; background: var(--text3); animation: typingPulse 1.2s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingPulse { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+/* Stage notification */
+.stage-notif {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text3);
+  padding: 6px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  align-self: flex-start;
+  animation: fadeIn 0.2s ease;
+}
+.stage-notif .spin { animation: spin 1s linear infinite; }
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+.stage-notif svg { width:12px; height:12px; flex-shrink:0; }
+
+/* Approval card */
+.approval-card-msg {
+  align-self: flex-start;
+  max-width: 460px;
+  background: var(--bg3);
+  border: 1px solid var(--amber);
+  border-radius: 14px;
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+.approval-header {
+  background: rgba(245,158,11,0.1);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amber);
+}
+.approval-header svg { width:15px; height:15px; }
+.approval-body { padding: 16px; }
+.proposal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.proposal-row:last-of-type { border-bottom: none; }
+.proposal-row .key { color: var(--text2); }
+.proposal-row .val { font-weight: 500; color: var(--text); }
+.approval-actions { display:flex; gap:10px; margin-top:14px; }
+.approval-actions .btn { flex:1; justify-content:center; }
+
+/* TX badge */
+.tx-badge-msg {
+  align-self: flex-start;
+  max-width: 400px;
+  background: rgba(16,185,129,0.07);
+  border: 1px solid rgba(16,185,129,0.4);
+  border-radius: 12px;
+  padding: 14px 16px;
+  animation: fadeIn 0.2s ease;
+}
+.tx-badge-msg h4 { font-size: 13px; font-weight: 600; color: var(--green); margin-bottom: 8px; display:flex; gap:6px; align-items:center; }
+.tx-badge-msg h4 svg { width:14px; height:14px; }
+.tx-hash-val { font-family: monospace; font-size: 11px; color: var(--text3); word-break: break-all; background: var(--bg2); padding: 7px 10px; border-radius: 6px; }
+.tx-loan-id { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+
+/* Chat input */
+.chat-input-area {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg1);
+  flex-shrink: 0;
+}
+.chat-input-wrap {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 12px 16px 10px;
+  transition: border-color 0.15s;
+}
+.chat-input-wrap:focus-within { border-color: var(--purple); }
+.chat-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 14px;
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 0;
+  line-height: 1.5;
+}
+.chat-textarea::placeholder { color: var(--text3); }
+.chat-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.chat-input-icons { display: flex; gap: 6px; }
+.input-icon { width: 30px; height: 30px; background: transparent; border: none; color: var(--text3); border-radius: 6px; display:grid; place-items:center; cursor:pointer; transition: all 0.12s; }
+.input-icon:hover { background: var(--bg4); color: var(--text2); }
+.input-icon svg { width: 15px; height: 15px; }
+.send-row { display:flex; align-items:center; gap:8px; }
+.press-enter { font-size: 11px; color: var(--text3); }
+.send-btn-chat {
+  width: 34px; height: 34px;
+  background: var(--purple);
+  border: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.send-btn-chat:hover { background: var(--purple2); transform: scale(1.05); }
+.send-btn-chat svg { width: 15px; height: 15px; color: #fff; }
+.mcp-footer { font-size: 11px; color: var(--text3); text-align: center; padding: 8px; }
+
+/* ═══════════════════════════════════════════
+   VIEW: SETTINGS / MCP CLIENTS
+═══════════════════════════════════════════ */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.settings-nav-item:hover { background: var(--purple-dim); color: var(--text); }
+.settings-nav-item.active { background: var(--purple-dim); color: var(--purple3); }
+.settings-nav-item svg { width: 14px; height: 14px; }
+
+.settings-panel { min-width: 0; }
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.panel-header h2 { font-family: var(--font-head); font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.panel-header p  { font-size: 13px; color: var(--text2); }
+
+/* MCP Clients table */
+.nodes-table {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.nodes-table table { width: 100%; border-collapse: collapse; }
+.nodes-table th {
+  background: var(--bg3);
+  padding: 11px 18px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border-bottom: 1px solid var(--border);
+}
+.nodes-table td {
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.nodes-table tr:last-child td { border-bottom: none; }
+.nodes-table tr:hover td { background: var(--bg3); }
+.node-name { display:flex; align-items:center; gap:10px; }
+.node-icon { width: 32px; height: 32px; background: var(--purple-dim); border: 1px solid var(--border2); border-radius: 8px; display:grid; place-items:center; flex-shrink:0; }
+.node-icon svg { width: 14px; height: 14px; color: var(--purple3); }
+.node-name-text h4 { font-size: 13px; font-weight: 500; color: var(--text); }
+.table-actions-btn {
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+.table-actions-btn:hover { background: var(--bg4); color: var(--text); }
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text3);
+}
+.pagination { display:flex; gap:8px; }
+.page-btn {
+  padding: 6px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.page-btn:hover { border-color: var(--border2); color: var(--text); }
+.page-btn.active { background: var(--purple-dim); border-color: var(--border2); color: var(--purple3); }
+
+/* ═══════════════════════════════════════════
+   VIEW: ANALYTICS
+═══════════════════════════════════════════ */
+.analytics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.analytics-header h1 { font-family: var(--font-head); font-size: 24px; font-weight: 700; }
+.analytics-controls { display:flex; gap:10px; }
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.analytics-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+.analytics-card h3 { font-size: 13px; font-weight: 600; color: var(--text2); display:flex; align-items:center; gap:7px; margin-bottom: 16px; }
+.analytics-card h3 svg { width:13px; height:13px; }
+
+.general-stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.gs-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.gs-label { font-size: 11px; color: var(--text3); margin-bottom: 5px; }
+.gs-val   { font-family: var(--font-head); font-size: 24px; font-weight: 700; }
+.gs-delta { font-size: 11px; color: var(--green); margin-top: 2px; }
+
+/* Platforms */
+.platform-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.platform-row:last-child { margin-bottom: 0; }
+.plat-icon { width: 28px; height: 28px; border-radius: 6px; background: var(--bg3); border: 1px solid var(--border); display:grid; place-items:center; flex-shrink:0; }
+.plat-icon svg { width: 13px; height: 13px; color: var(--text2); }
+.plat-name { font-size: 13px; color: var(--text2); width: 80px; }
+.plat-track { flex: 1; height: 5px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+.plat-fill  { height: 100%; background: var(--purple); border-radius: 3px; }
+.plat-pct   { font-size: 12px; font-weight: 600; color: var(--text); width: 35px; text-align: right; }
+
+/* Analytics bottom grid */
+.analytics-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+.donut-wrap { position: relative; width: 120px; height: 120px; margin: 0 auto 12px; }
+.donut-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.donut-label .d-val { font-family: var(--font-head); font-size: 18px; font-weight: 700; }
+.donut-label .d-sub { font-size: 10px; color: var(--text3); }
+.legend-rows { display: flex; flex-direction: column; gap: 6px; }
+.legend-row  { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+.legend-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.time-row:last-child { border-bottom: none; }
+.time-av { width: 28px; height: 28px; border-radius: 50%; background: var(--bg3); display: grid; place-items: center; font-size: 10px; font-weight: 600; color: var(--text); flex-shrink: 0; }
+.time-info { flex: 1; }
+.time-info .ti-name { font-size: 12px; font-weight: 500; color: var(--text); }
+.time-info .ti-role { font-size: 11px; color: var(--text3); }
+.time-bar-wrap { flex: 1; max-width: 100px; }
+.time-track { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin-bottom: 2px; }
+.time-fill  { height: 100%; background: var(--purple); border-radius: 2px; }
+.time-val   { font-size: 11px; color: var(--text3); }
+
+/* ═══════════════════════════════════════════
+   MISC UTILITIES
+═══════════════════════════════════════════ */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.ml-auto { margin-left: auto; }
+.text-purple { color: var(--purple3); }
+.text-muted  { color: var(--text2); }
+.text-sm     { font-size: 13px; }
+.font-head   { font-family: var(--font-head); }
+
+/* Loading spinner */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  animation: toastIn 0.25s ease;
+}
+.toast.success { border-color: rgba(16,185,129,0.5); }
+.toast.error   { border-color: rgba(239,68,68,0.5); }
+.toast svg { width: 16px; height: 16px; flex-shrink: 0; }
+.toast.success svg { color: var(--green); }
+.toast.error svg   { color: var(--red); }
+@keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+/* Map modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  width: 820px;
+  max-width: 96vw;
+  height: 540px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  flex-shrink: 0;
+}
+.modal-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.modal-header h3 svg { width: 14px; height: 14px; color: var(--purple3); }
+.modal-close { margin-left: auto; background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; padding: 0 4px; }
+.modal-close:hover { color: var(--text); }
+.modal-box iframe { flex: 1; border: none; width: 100%; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCREEN 1: LANDING PAGE
+══════════════════════════════════════ -->
+<div id="landing" class="screen active">
+  <nav class="land-nav">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      Sanjeevani
+    </div>
+    <div class="land-nav-links">
+      <a href="#">Infrastructure</a>
+      <a href="#">MCP Protocol</a>
+      <a href="#">GIS Routing</a>
+      <a href="#">Documentation</a>
+    </div>
+    <div class="land-nav-right">
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('login')">Login</button>
+      <button class="btn btn-primary btn-sm" onclick="showScreen('login')">Initialize Node</button>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-tag">Node v2.4 · Sovereign Smart Contracts are live</div>
+    <h1>SANJEEVANI<br><em style="font-size: 0.4em; ;">Smart-Contracts-for-Smarter-Care</em></h1>
+    <p>Sanjeevani orchestrates smart contracts, MCP nodes, and GIS routing into a single, high-fidelity sovereign network for healthcare logistics.</p>
+    <div class="hero-btns">
+      <button class="btn btn-primary btn-lg" onclick="showScreen('login')">Build with Sanjeevani →</button>
+      <button class="btn btn-ghost btn-lg">View Protocol</button>
+    </div>
+  </section>
+
+  <div class="feature-strip">
+    <div class="feature-pill">
+      <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div><strong>Smart Contracts</strong><span style="color:var(--text3)"> · Sovereign Layer 0</span></div>
+    </div>
+    <div class="feature-pill">
+      <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></div>
+      <div><strong>MCP Orchestration</strong><span style="color:var(--text3)"> · Model Context Bridge</span></div>
+    </div>
+    <div class="feature-pill">
+      <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+      <div><strong>GIS Routing</strong><span style="color:var(--text3)"> · Dynamic Geo-Logic</span></div>
+    </div>
+  </div>
+
+  <section class="features-section">
+    <div class="section-label">Core Engines</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <h3>Autonomous Orchestration</h3>
+        <p>MCP-driven protocol that manages node life-cycles and smart asset distribution with zero human intervention.</p>
+      </div>
+      <div class="feature-card">
+        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+        <h3>GIS-Logic Routing</h3>
+        <p>Proprietary spatial routing algorithms that optimize data packets based on physical geopolitical and network constraints.</p>
+      </div>
+      <div class="feature-card">
+        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+        <h3>Hyper-Mesh Nodes</h3>
+        <p>Connect any legacy system into the Sanjeevani mesh using lightweight adapter clients for instant infrastructure upgrades.</p>
+      </div>
+      <div class="feature-card">
+        <div class="f-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <h3>Post-Quantum Guard</h3>
+        <p>Layer 0 encryption using lattice-based cryptography, ensuring your sovereign contracts remain secure for the next century.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="topology-section">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-bottom:40px;">
+      <div>
+        <div class="section-label">Deep Visibility</div>
+        <div class="section-title">Absolute Control</div>
+        <p class="section-sub" style="margin-bottom:20px">Transition seamlessly from high-level architecture to granular node management via our unified MCP Client Interface.</p>
+        <button class="btn btn-primary" onclick="showScreen('login')">Access Dashboard →</button>
+      </div>
+      <div class="topology-card">
+        <div class="topology-header">
+          <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="title">⬤ SYSTEM_STATUS: NOMINAL</div>
+        </div>
+        <div class="topology-body">
+          <div class="topo-sidebar">
+            <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Endpoints</div>
+            <div class="topo-nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Live Routing Map</div>
+            <div class="topo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Smart Assets</div>
+            <div class="topo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>Node Clusters</div>
+          </div>
+          <div class="topo-map">
+            <div class="topo-map-title">Network Topology</div>
+            <div class="topo-map-sub">Global Instance: US-EAST-1</div>
+            <div class="topo-node topo-node-purple" style="top:45%;left:28%"></div>
+            <div class="topo-node topo-node-cyan"   style="top:38%;left:55%"></div>
+            <div class="topo-node topo-node-purple" style="top:62%;left:68%"></div>
+            <div class="topo-node topo-node-green"  style="top:55%;left:82%"></div>
+            <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 400 220">
+              <line x1="112" y1="99" x2="220" y2="84" stroke="rgba(139,92,246,0.25)" stroke-width="1" stroke-dasharray="4,3"/>
+              <line x1="220" y1="84" x2="272" y2="136" stroke="rgba(6,182,212,0.25)" stroke-width="1" stroke-dasharray="4,3"/>
+              <line x1="272" y1="136" x2="328" y2="121" stroke="rgba(16,185,129,0.25)" stroke-width="1" stroke-dasharray="4,3"/>
+            </svg>
+            <div class="topo-stats">
+              <div class="topo-stat"><div class="ts-label">LATENCY</div><div class="ts-val">12ms</div></div>
+              <div class="topo-stat"><div class="ts-label">HOPS</div><div class="ts-val">04</div></div>
+              <div class="topo-stat"><div class="ts-label">SECURITY</div><div class="ts-val" style="color:var(--green)">L5</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="testimonial-section">
+    <div class="avatars-row"><div class="av av-1"></div><div class="av av-2"></div><div class="av av-3"></div></div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Built for the Sovereign Thinkers.</div>
+    <blockquote>"Sanjeevani transformed our GIS routing from a manual headache into a fully autonomous revenue stream. It's the infrastructure I've been waiting for."</blockquote>
+  </section>
+
+  <section class="cta-section">
+    <h2>Ready to go sovereign?</h2>
+    <p style="color:var(--text2)">Join the decentralized health network. Only 42 waitlist spots for Beta-Sovereign.</p>
+    <button class="btn btn-primary btn-lg" onclick="showScreen('login')">Join Waitlist Now</button>
+    <div class="cta-sub">Only 42 waitlist spots left for the Beta-Sovereign phase.</div>
+  </section>
+
+  <footer class="land-footer">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      Sanjeevani
+    </div>
+    <div class="land-footer-links">
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <a href="#">Whitepaper</a>
+    </div>
+    <div class="status-chip">Status: All Systems Operational</div>
+    <div style="font-size:11px;color:var(--text3)">© 2024 Sanjeevani Labs. All rights reserved.</div>
+  </footer>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 2: LOGIN
+══════════════════════════════════════ -->
+<div id="login" class="screen">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px;">
+    <div class="login-wrap" style="width:100%;max-width:1000px;">
+      <div class="login-left">
+        <div class="logo">
+          <div class="logo-icon"><svg viewBox="0 0 24 24" stroke-width="2" fill="none" stroke="white"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          Sanjeevani
+        </div>
+        <h2>Smart Contracts for<br><em>Smarter Healthcare</em></h2>
+        <p>Join the decentralized health network orchestrating secure resources and AI-driven care automation.</p>
+        <div class="security-badge">
+          <div class="sec-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h4>Enterprise Grade Security</h4>
+            <p>HIPAA compliant and SOC2 Type II certified orchestration.</p>
+          </div>
+        </div>
+        <div class="trusted-line">TRUSTED BY 450+ GLOBAL MEDICAL INSTITUTIONS</div>
+      </div>
+
+      <div class="login-right">
+        <div class="login-tabs">
+          <button class="tab-btn active" id="loginTabBtn" onclick="switchTab('login')">Login</button>
+          <button class="tab-btn" id="signupTabBtn" onclick="switchTab('signup')">Sign Up</button>
+        </div>
+
+        <div id="loginForm">
+          <h2>Welcome Back</h2>
+          <p>Enter your credentials to access your clinical dashboard.</p>
+          <div class="oauth-grid">
+            <button class="oauth-btn" onclick="doLogin()">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+              Google
+            </button>
+            <button class="oauth-btn" onclick="doLogin()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Azure AD
+            </button>
+          </div>
+          <div class="divider">OR CONTINUE WITH EMAIL</div>
+          <div class="form-row">
+            <div class="form-label">Email Address</div>
+            <div class="input-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <input type="email" placeholder="name@hospital.org" id="emailInput"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">
+              Password
+              <a href="#">Forgot password?</a>
+            </div>
+            <div class="input-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" placeholder="••••••••" id="passInput"/>
+            </div>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="rememberMe"/>
+            <label for="rememberMe">Keep me logged in for 30 days</label>
+          </div>
+          <button class="btn btn-primary btn-full" onclick="doLogin()">
+            Sign In to Dashboard →
+          </button>
+          <div class="hipaa-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Fully HIPAA & GDPR Compliant Environment
+          </div>
+          <div class="hipaa-sub" style="text-align:center;margin-top:8px;">By continuing, you agree to Sanjeevani's <a href="#" style="color:var(--purple3)">Terms of Service</a> and <a href="#" style="color:var(--purple3)">Security Protocols</a>.</div>
+        </div>
+
+        <div id="signupForm" style="display:none">
+          <h2>Create Account</h2>
+          <p>Register your hospital node on the Sanjeevani network.</p>
+          <div class="form-row">
+            <div class="form-label">Hospital Name</div>
+            <div class="input-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <input type="text" placeholder="St. Mary's Medical Center"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">Email Address</div>
+            <div class="input-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <input type="email" placeholder="admin@hospital.org"/>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-label">Password</div>
+            <div class="input-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" placeholder="Create strong password"/>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" onclick="doLogin()">Register Node →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="live-support">
+    <div class="logo-icon" style="width:22px;height:22px;border-radius:5px;"><svg viewBox="0 0 24 24" stroke-width="2.5" fill="none" stroke="white" style="width:11px;height:11px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+    Live Support
+    <div class="live-dot"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     APP SHELL (Dashboard / MCP / Settings / Analytics)
+══════════════════════════════════════ -->
+<div id="app-shell">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="logo" style="cursor:pointer" onclick="showView('dashboard')">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" stroke-width="2" fill="none" stroke="white"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      Sanjeevani
+    </div>
+
+    <div class="nav-section-label">Main Menu</div>
+    <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" id="nav-mcp" onclick="showView('mcp')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      MCP Client
+    </div>
+    <div class="nav-item" id="nav-analytics" onclick="showView('analytics')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </div>
+    <div class="nav-item" id="nav-settings" onclick="showView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M20 12h-2M6 12H4M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/></svg>
+      Settings
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="server-health">
+        <div class="label">Server Health</div>
+        <div class="value">Connected: 14 Endpoints</div>
+      </div>
+      <div class="usage-bar-wrap">
+        <div class="label">Usage Limit</div>
+        <div class="usage-track"><div class="usage-fill" style="width:65%"></div></div>
+        <div class="nums">650 / 1,000 API Requests</div>
+      </div>
+      <div class="sign-out-btn" onclick="signOut()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Search patients, tools..."/>
+      </div>
+      <div class="topbar-right">
+        <div class="notif-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><div class="notif-dot"></div></div>
+        <div class="avatar" title="Developer">D</div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div class="view active" id="view-dashboard">
+      <div class="dash-header">
+        <h1>Dashboard</h1>
+        <p>Welcome back — here's your network overview.</p>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="sc-label">Active Nodes</div>
+          <div class="sc-value">24</div>
+          <div class="sc-delta">↑ 3 this week</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">Loans Active</div>
+          <div class="sc-value" id="loanCount">—</div>
+          <div class="sc-delta">Loading...</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">Dispatches Today</div>
+          <div class="sc-value">8</div>
+          <div class="sc-delta">↑ 12% vs yesterday</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">API Requests</div>
+          <div class="sc-value">650</div>
+          <div class="sc-delta sc-delta">65% of limit</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="chart-card">
+          <h3>Request Activity</h3>
+          <div class="chart-tabs">
+            <div class="chart-tab active">Meetings</div>
+            <div class="chart-tab">Hours</div>
+            <div class="chart-tab">Participants</div>
+          </div>
+          <div class="chart-bar-wrap" id="barChart"></div>
+        </div>
+        <div class="activity-card">
+          <h3>Live Activity</h3>
+          <div class="activity-item">
+            <div class="act-dot" style="background:var(--green)"></div>
+            <div class="act-text"><strong>Ujaan Hospital</strong> dispatched 2× Oxygen Cylinders</div>
+            <div class="act-time">2m ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot" style="background:var(--purple)"></div>
+            <div class="act-text">Loan <strong>#4</strong> settled on-chain · 0.12 ETH released</div>
+            <div class="act-time">15m ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot" style="background:var(--cyan)"></div>
+            <div class="act-text"><strong>Apollo</strong> joined the Sanjeevani mesh</div>
+            <div class="act-time">1h ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot" style="background:var(--amber)"></div>
+            <div class="act-text">GIS route recomputed for <strong>h2 → h3</strong></div>
+            <div class="act-time">2h ago</div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot" style="background:var(--red)"></div>
+            <div class="act-text"><strong>Apollo Care Hub</strong> node went offline</div>
+            <div class="act-time">2d ago</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hospitals quick view -->
+      <div class="card" style="margin-top:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:14px;font-weight:600;">Connected Hospitals</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadHospitals()">Refresh</button>
+        </div>
+        <div id="hospitalsTable" style="font-size:13px;color:var(--text2);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- MCP CLIENT VIEW -->
+    <div class="view" id="view-mcp">
+      <div class="mcp-shell">
+        <div class="mcp-sidebar">
+          <button class="new-chat-btn" onclick="newChat()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Chat
+          </button>
+          <div class="history-label">Recurrent Events</div>
+          <div class="history-item active" id="hist-debug">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            Debug MCP Server
+          </div>
+          <div class="history-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            UI Components Design
+          </div>
+          <div class="history-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Protocol Discussion
+          </div>
+          <div class="history-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Model Config A1
+          </div>
+          <div class="mcp-user-row">
+            <div class="av">D</div>
+            <div class="mcp-user-info"><h4>Developer</h4><p>Pro Account</p></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:var(--text3);margin-left:auto;cursor:pointer;"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </div>
+        </div>
+
+        <div class="mcp-main">
+          <div class="mcp-topbar">
+            <div class="mcp-topbar-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>
+              MCP Client — Production Environment
+            </div>
+            <div class="mcp-topbar-actions">
+              <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+              <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M20 12h-2M6 12H4M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/></svg></div>
+            </div>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-welcome" id="chatWelcome">
+              <div class="chat-welcome-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>
+              </div>
+              <h3>MCP ASSISTANT</h3>
+              <p>Hello! I'm your Model Context Protocol client. I can help you interact with your local or remote servers, debug protocols, or manage data flows. How can I assist you today?</p>
+              <div class="suggestion-pills">
+                <button class="suggestion-pill" onclick="useSuggestion(this)">Find all nearby hospitals</button>
+                <button class="suggestion-pill" onclick="useSuggestion(this)">Check server connection status</button>
+                <button class="suggestion-pill" onclick="useSuggestion(this)">Upload schema.json for registering equipment</button>
+                <button class="suggestion-pill" onclick="useSuggestion(this)">Create Loan</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input-area">
+            <div class="chat-input-wrap">
+              <textarea class="chat-textarea" id="chatInput" placeholder="Message MCP Assistant or upload a file..." rows="2"
+                onkeydown="handleChatKey(event)" oninput="autoResizeTA(this)"></textarea>
+              <div class="chat-input-footer">
+                <div class="chat-input-icons">
+                  <button class="input-icon" title="Attach file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </button>
+                  <button class="input-icon" title="Voice input">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                  </button>
+                </div>
+                <div class="send-row">
+                  <span class="press-enter">Press Enter to send</span>
+                  <button class="send-btn-chat" id="sendBtn" onclick="sendChat()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="mcp-footer">MCP Client v1.0.4 — Secured with end-to-end encryption.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div class="view" id="view-settings">
+      <div style="margin-bottom:24px;">
+        <h1 style="font-family:var(--font-head);font-size:24px;font-weight:700;margin-bottom:4px;">Settings</h1>
+        <p style="font-size:13px;color:var(--text2);">Configure your Sanjeevani node and account.</p>
+      </div>
+      <div class="settings-layout">
+        <div class="settings-nav">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.1em;padding:0 8px 8px;">Configuration</div>
+          <div class="settings-nav-item active" onclick="showSettingsPanel('mcp-clients')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>
+            MCP Clients
+          </div>
+          <div class="settings-nav-item" onclick="showSettingsPanel('admin')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Admin Profile
+          </div>
+          <div class="settings-nav-item" onclick="showSettingsPanel('endpoints')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Endpoints
+          </div>
+          <div class="settings-nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            API Security
+          </div>
+          <div class="settings-nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Roles & Access
+          </div>
+        </div>
+
+        <div class="settings-panel" id="settingsPanel">
+          <!-- MCP Clients panel (default) -->
+          <div id="panel-mcp-clients">
+            <div class="panel-header">
+              <div>
+                <h2>MCP Clients</h2>
+                <p>Register and monitor edge nodes contributing to the Sanjeevani network.</p>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="showToast('Node registration wizard coming soon.','success')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Register Node
+              </button>
+            </div>
+            <div class="nodes-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Node Name</th>
+                    <th>Region</th>
+                    <th>Network Status</th>
+                    <th>Last Pulse</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="nodesTableBody">
+                  <tr><td colspan="5" style="text-align:center;color:var(--text3);padding:30px;">Loading nodes...</td></tr>
+                </tbody>
+              </table>
+              <div class="table-footer">
+                <span id="nodesCount">Showing 5 of 24 connected nodes</span>
+                <div class="pagination">
+                  <button class="page-btn">Previous</button>
+                  <button class="page-btn active">1</button>
+                  <button class="page-btn">2</button>
+                  <button class="page-btn">Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Other panels -->
+          <div id="panel-admin" style="display:none">
+            <div class="panel-header"><div><h2>Admin Profile</h2><p>Manage your account and organization details.</p></div></div>
+            <div class="card"><p style="color:var(--text2);font-size:13px;">Profile settings panel — connect to your user API endpoint to populate.</p></div>
+          </div>
+          <div id="panel-endpoints" style="display:none">
+            <div class="panel-header"><div><h2>Endpoints</h2><p>Configure backend, GIS, and blockchain service URLs.</p></div></div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div class="card">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;">BACKEND API</div>
+                <input type="text" value="http://localhost:8000" style="padding-left:14px;"/>
+              </div>
+              <div class="card">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;">GIS SERVER</div>
+                <input type="text" value="http://localhost:8001" style="padding-left:14px;"/>
+              </div>
+              <div class="card">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;">MCP SERVER</div>
+                <input type="text" value="http://localhost:9001" style="padding-left:14px;"/>
+              </div>
+              <div class="card">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;">BLOCKCHAIN RPC</div>
+                <input type="text" value="http://127.0.0.1:8545" style="padding-left:14px;"/>
+              </div>
+              <button class="btn btn-primary" style="width:fit-content" onclick="showToast('Endpoints saved.','success')">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS VIEW -->
+    <div class="view" id="view-analytics">
+      <div class="analytics-header">
+        <h1>Analytics</h1>
+        <div class="analytics-controls">
+          <button class="btn btn-ghost btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filters
+          </button>
+          <button class="btn btn-ghost btn-sm">This month ▾</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadAnalytics()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.07-8.95"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="analytics-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> General Stats</h3>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">
+            <div class="general-stats">
+              <div class="gs-card"><div class="gs-label">Total Dispatches</div><div class="gs-val">352</div><div class="gs-delta">↑ 12%</div></div>
+              <div class="gs-card"><div class="gs-label">Avg Per Node</div><div class="gs-val">14</div><div class="gs-delta">↑ 12%</div></div>
+            </div>
+            <div id="analyticsBarChart" style="height:160px;display:flex;align-items:flex-end;gap:6px;"></div>
+          </div>
+        </div>
+        <div class="analytics-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Platforms</h3>
+          <div>
+            <div class="platform-row">
+              <div class="plat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+              <div class="plat-name">GIS</div>
+              <div class="plat-track"><div class="plat-fill" style="width:80%"></div></div>
+              <div class="plat-pct">80%</div>
+            </div>
+            <div class="platform-row">
+              <div class="plat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+              <div class="plat-name">Blockchain</div>
+              <div class="plat-track"><div class="plat-fill" style="width:60%"></div></div>
+              <div class="plat-pct">60%</div>
+            </div>
+            <div class="platform-row">
+              <div class="plat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+              <div class="plat-name">MCP</div>
+              <div class="plat-track"><div class="plat-fill" style="width:50%;background:var(--cyan)"></div></div>
+              <div class="plat-pct">50%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="analytics-bottom">
+        <div class="analytics-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg> Sentiments</h3>
+          <div class="donut-wrap">
+            <svg width="120" height="120" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--bg4)" stroke-width="4"/>
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--purple)" stroke-width="4" stroke-dasharray="34 66" stroke-dashoffset="25" stroke-linecap="round"/>
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--cyan)" stroke-width="4" stroke-dasharray="45 55" stroke-dashoffset="-9" stroke-linecap="round"/>
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--red)" stroke-width="4" stroke-dasharray="21 79" stroke-dashoffset="-54" stroke-linecap="round"/>
+            </svg>
+            <div class="donut-label"><div class="d-val">100%</div><div class="d-sub">Total</div></div>
+          </div>
+          <div class="legend-rows">
+            <div class="legend-row"><div class="legend-dot" style="background:var(--purple)"></div> Positive 34%</div>
+            <div class="legend-row"><div class="legend-dot" style="background:var(--cyan)"></div> Neutral 45%</div>
+            <div class="legend-row"><div class="legend-dot" style="background:var(--red)"></div> Negative 21%</div>
+          </div>
+        </div>
+        <div class="analytics-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Time Per Node</h3>
+          <div id="timeRows"></div>
+        </div>
+        <div class="analytics-card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg> Active Hospitals</h3>
+          <div id="talkRows"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAP MODAL -->
+<div class="modal-overlay" id="mapModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Route Map — Powered by OpenStreetMap</h3>
+      <button class="modal-close" onclick="closeMapModal()">✕</button>
+    </div>
+    <iframe id="mapIframe" src="" title="Route Map" sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════ */
+const API = {
+  MCP:     'http://localhost:9001',
+  BACKEND: 'http://localhost:8000',
+  GIS:     'http://localhost:8001',
+};
+
+/* ════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════ */
+let sessionId   = null;
+let sseSource   = null;
+let currentUser = { name: 'Developer', role: 'Pro Account', hospital_id: 'h1' };
+
+/* ════════════════════════════════════════════
+   ROUTER
+════════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('app-shell').classList.remove('active');
+
+  if (id === 'app') {
+    document.getElementById('app-shell').classList.add('active');
+    showView('dashboard');
+    loadHospitals();
+    loadNodes();
+    loadAnalytics();
+    renderBarChart();
+  } else {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+  }
+}
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + id)?.classList.add('active');
+  document.getElementById('nav-' + id)?.classList.add('active');
+  if (id === 'analytics') loadAnalytics();
+}
+
+function showSettingsPanel(id) {
+  document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.querySelectorAll('[id^="panel-"]').forEach(p => p.style.display = 'none');
+  const el = document.getElementById('panel-' + id);
+  if (el) el.style.display = 'block';
+}
+
+/* ════════════════════════════════════════════
+   AUTH
+════════════════════════════════════════════ */
+function switchTab(tab) {
+  document.getElementById('loginTabBtn').classList.toggle('active', tab === 'login');
+  document.getElementById('signupTabBtn').classList.toggle('active', tab === 'signup');
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+}
+
+function doLogin() {
+  showScreen('app');
+  showToast('Welcome back, Developer!', 'success');
+}
+
+function signOut() {
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  sessionId = null;
+  showScreen('landing');
+}
+
+/* ════════════════════════════════════════════
+   BACKEND DATA
+════════════════════════════════════════════ */
+async function loadHospitals() {
+  const el = document.getElementById('hospitalsTable');
+  el.innerHTML = '<div style="color:var(--text3);font-size:12px;">Loading...</div>';
+  try {
+    const res  = await fetch(`${API.BACKEND}/hospitals`);
+    const data = await res.json();
+    if (!data.length) { el.innerHTML = '<div style="color:var(--text3)">No hospitals found.</div>'; return; }
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        ${['ID','Name','Wallet','Location'].map(h => `<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${data.map(h => `<tr style="transition:background .12s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+          <td style="padding:10px 12px;font-size:12px;font-family:monospace;color:var(--purple3)">${h.id}</td>
+          <td style="padding:10px 12px;font-size:13px;font-weight:500;color:var(--text)">${h.name}</td>
+          <td style="padding:10px 12px;font-size:11px;font-family:monospace;color:var(--text3)">${h.wallet?.slice(0,18)}...</td>
+          <td style="padding:10px 12px;font-size:12px;color:var(--text2)">${h.location?.lat}, ${h.location?.lon}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+    // Update loan count
+    document.getElementById('loanCount').textContent = data.length;
+    document.querySelector('#loanCount + .sc-delta').textContent = `${data.length} hospitals`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--text3);font-size:12px;">⚠️ Backend offline (localhost:8000)</div>`;
+  }
+}
+
+function loadNodes() {
+  const tbody = document.getElementById('nodesTableBody');
+  const mockNodes = [
+    {name:'Central General — Node Alpha', region:'Mumbai East',   status:'online',  pulse:'2 mins ago'},
+    {name:"St. Mary's Logistics",         region:'Pune North',    status:'syncing', pulse:'Now'},
+    {name:'Global Biotech Lab',           region:'Hyderabad',     status:'online',  pulse:'1 hour ago'},
+    {name:'Apollo Care Hub',              region:'Bangalore South',status:'offline', pulse:'2 days ago'},
+    {name:'City Trauma Center',           region:'Chennai',       status:'online',  pulse:'15 mins ago'},
+  ];
+  tbody.innerHTML = mockNodes.map(n => `
+    <tr>
+      <td><div class="node-name">
+        <div class="node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg></div>
+        <div class="node-name-text"><h4>${n.name}</h4></div>
+      </div></td>
+      <td>${n.region}</td>
+      <td><span class="badge badge-${n.status}">${n.status}</span></td>
+      <td>${n.pulse}</td>
+      <td><button class="table-actions-btn">⋮</button></td>
+    </tr>`).join('');
+  document.getElementById('nodesCount').textContent = `Showing ${mockNodes.length} of 24 connected nodes`;
+}
+
+function loadAnalytics() {
+  // Analytics bar chart
+  const container = document.getElementById('analyticsBarChart');
+  if (!container) return;
+  const vals = [65,80,55,90,72,88,60,75];
+  const labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'];
+  container.innerHTML = vals.map((v,i) => `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;height:${v*1.4}px;background:${v===Math.max(...vals)?'var(--purple)':'var(--purple-dim)'};border:1px solid var(--border2);border-radius:4px 4px 0 0;transition:all .2s;cursor:pointer;" 
+        onmouseover="this.style.background='var(--purple)'" onmouseout="this.style.background='${v===Math.max(...vals)?'var(--purple)':'var(--purple-dim)'}'"></div>
+      <span style="font-size:10px;color:var(--text3)">${labels[i]}</span>
+    </div>`).join('');
+
+  // Time rows
+  const timeContainer = document.getElementById('timeRows');
+  if (timeContainer) {
+    const nodes = ['Ujaan Hospital','Apollo Care','Tata Memorial'];
+    const colors = ['#8b5cf6','#06b6d4','#10b981'];
+    timeContainer.innerHTML = nodes.map((n,i) => `
+      <div class="time-row">
+        <div class="time-av" style="background:${colors[i]}22;color:${colors[i]}">${n[0]}</div>
+        <div class="time-info"><div class="ti-name">${n}</div><div class="ti-role">Hospital Node</div></div>
+        <div class="time-bar-wrap">
+          <div class="time-track"><div class="time-fill" style="width:${[80,60,50][i]}%;background:${colors[i]}"></div></div>
+          <div class="time-val">${['40h','28h','18h'][i]}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // Talk rows
+  const talkContainer = document.getElementById('talkRows');
+  if (talkContainer) {
+    const nodes2 = ['Ujaan Hospital','Apollo','Tata Memorial','City Trauma'];
+    talkContainer.innerHTML = nodes2.map((n,i) => `
+      <div class="time-row">
+        <div class="time-av">${n[0]}</div>
+        <div class="time-info"><div class="ti-name">${n}</div><div class="ti-role">Active</div></div>
+        <div style="font-size:12px;font-weight:600;color:var(--purple3)">${[80,60,50,40][i]}%</div>
+        <div style="font-size:12px;color:var(--text3)">${[26,20,16,14][i]}%</div>
+      </div>`).join('');
+  }
+}
+
+function renderBarChart() {
+  const container = document.getElementById('barChart');
+  if (!container) return;
+  const vals   = [120,180,90,220,150,200,130,170,110,190,145,210];
+  const labels = ['1.05','1.05','1.05','1.05','1.05','1.05','1.05','1.05','1.05','1.05','1.05','1.05'];
+  const mx = Math.max(...vals);
+  container.innerHTML = vals.map((v,i) => `
+    <div class="chart-bar-col">
+      <div class="chart-bar" style="height:${(v/mx)*160}px" title="${v} requests"></div>
+      <div class="chart-bar-label">${labels[i]}</div>
+    </div>`).join('');
+}
+
+/* ════════════════════════════════════════════
+   CHAT / MCP
+════════════════════════════════════════════ */
+function getOrCreateSession() {
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    startSSE();
+  }
+  return sessionId;
+}
+
+function startSSE() {
+  if (sseSource) sseSource.close();
+  try {
+    sseSource = new EventSource(`${API.MCP}/chat/stream/${sessionId}`);
+    sseSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.notification) appendStageNotif(data.notification);
+      } catch {}
+    };
+  } catch {}
+}
+
+function newChat() {
+  sessionId = null;
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML = document.querySelector('.chat-welcome').outerHTML;
+  document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('hist-debug').classList.add('active');
+  showToast('New chat started', 'success');
+}
+
+function useSuggestion(btn) {
+  document.getElementById('chatInput').value = btn.textContent;
+  sendChat();
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+function autoResizeTA(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function appendUserMsg(text) {
+  const msgs  = document.getElementById('chatMessages');
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+  const el = document.createElement('div');
+  el.className = 'chat-msg user';
+  el.innerHTML = `<div class="msg-sender">You</div><div class="msg-bubble">${escHtml(text)}</div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendAiMsg(text) {
+  const msgs = document.getElementById('chatMessages');
+  const el   = document.createElement('div');
+  el.className = 'chat-msg ai';
+  el.innerHTML = `<div class="msg-sender"><div class="sender-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg></div>MCP ASSISTANT</div>
+    <div class="msg-bubble">${renderMd(text)}</div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  return el;
+}
+
+function appendStageNotif(text) {
+  const msgs = document.getElementById('chatMessages');
+  // Remove any existing stage notif
+  document.querySelectorAll('.stage-notif').forEach(e => e.remove());
+  const el = document.createElement('div');
+  el.className = 'stage-notif';
+  el.innerHTML = `<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>${escHtml(text)}`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping() {
+  const msgs = document.getElementById('chatMessages');
+  const el   = document.createElement('div');
+  el.id = 'typingIndicator';
+  el.className = 'chat-msg ai';
+  el.innerHTML = `<div class="msg-sender"><div class="sender-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:9px;height:9px;"><circle cx="12" cy="12" r="3"/></svg></div>MCP ASSISTANT</div>
+    <div class="msg-bubble" style="padding:14px 16px;"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+function removeTyping() { document.getElementById('typingIndicator')?.remove(); }
+
+function showApprovalCard(proposal, mapUrl) {
+  const msgs = document.getElementById('chatMessages');
+  document.querySelectorAll('.stage-notif').forEach(e => e.remove());
+  const card = document.createElement('div');
+  card.className = 'approval-card-msg';
+  const mapBtn = mapUrl
+    ? `<button onclick="openMapModal('${mapUrl}')" style="display:flex;align-items:center;gap:6px;background:var(--bg4);border:1px solid var(--border2);border-radius:7px;padding:6px 12px;font-size:12px;color:var(--purple3);cursor:pointer;margin-bottom:12px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        View Route on Map
+       </button>`
+    : '';
+  const rows = [
+    ['Equipment', `${proposal.quantity}× ${proposal.equipment_type}`],
+    ['From', `${proposal.from_hospital_name || proposal.from_hospital_id}`],
+    ['Duration', `${proposal.duration_hours} hours`],
+    ['Distance', proposal.distance_km ? `${Number(proposal.distance_km).toFixed(1)} km` : 'N/A'],
+    ['ETA', proposal.eta_min ? `${Math.round(proposal.eta_min)} min` : 'N/A'],
+  ].map(([k,v]) => `<div class="proposal-row"><div class="key">${k}</div><div class="val">${v}</div></div>`).join('');
+  card.innerHTML = `
+    <div class="approval-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Loan Approval Required</div>
+    <div class="approval-body">
+      ${mapBtn}
+      ${rows}
+      <div class="approval-actions">
+        <button class="btn btn-primary btn-sm" onclick="sendApproval('yes')">✓ Approve Loan</button>
+        <button class="btn btn-danger btn-sm" onclick="sendApproval('no')">✕ Cancel</button>
+      </div>
+    </div>`;
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTxBadge(txHash, loanId) {
+  const msgs = document.getElementById('chatMessages');
+  const el   = document.createElement('div');
+  el.className = 'tx-badge-msg';
+  el.innerHTML = `<h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> Loan Recorded On-Chain</h4>
+    <div class="tx-loan-id">Loan ID: <strong>#${loanId}</strong></div>
+    <div class="tx-hash-val">Tx: ${txHash}</div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function sendApproval(decision) {
+  document.getElementById('chatInput').value = decision === 'yes'
+    ? 'Yes, I approve the loan. Please proceed.'
+    : 'No, please cancel.';
+  sendChat();
+}
+
+async function sendChat() {
+  const input   = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const query   = input.value.trim();
+  if (!query) return;
+
+  const sid = getOrCreateSession();
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  appendUserMsg(query);
+  showTyping();
+
+  try {
+    const res = await fetch(`${API.MCP}/chat`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        query,
+        session_id:  sid,
+        hospital_id: currentUser.hospital_id || null,
+      })
+    });
+
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+
+    removeTyping();
+    document.querySelectorAll('.stage-notif').forEach(e => e.remove());
+
+    if (data.reply) appendAiMsg(data.reply);
+    if (data.approval_required && data.loan_proposal) showApprovalCard(data.loan_proposal, data.map_url);
+    if (data.tx_hash) showTxBadge(data.tx_hash, data.loan_id);
+
+  } catch (e) {
+    removeTyping();
+    document.querySelectorAll('.stage-notif').forEach(e => e.remove());
+    appendAiMsg(`⚠️ Could not connect to MCP server at <code>${API.MCP}</code>. Make sure it's running with <code>uvicorn mcp_server.wrapper:app --port 9001</code>`);
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+/* ════════════════════════════════════════════
+   MAP MODAL
+════════════════════════════════════════════ */
+function openMapModal(mapUrl) {
+  const embedUrl = `${API.MCP}/map-dialog?map_url=${encodeURIComponent(mapUrl)}`;
+  document.getElementById('mapIframe').src = embedUrl;
+  document.getElementById('mapModal').classList.add('open');
+}
+function closeMapModal() {
+  document.getElementById('mapModal').classList.remove('open');
+  document.getElementById('mapIframe').src = '';
+}
+document.getElementById('mapModal').addEventListener('click', function(e) {
+  if (e.target === this) closeMapModal();
+});
+
+/* ════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════ */
+function showToast(msg, type = 'success') {
+  const icons = {
+    success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+    error:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  };
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `${icons[type] || icons.success}${escHtml(msg)}`;
+  container.appendChild(el);
+  setTimeout(() => el.style.opacity = '0', 3000);
+  setTimeout(() => el.remove(), 3400);
+}
+
+/* ════════════════════════════════════════════
+   UTILITIES
+════════════════════════════════════════════ */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function renderMd(text) {
+  return String(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="font-family:monospace;font-size:12px;background:var(--bg4);padding:1px 5px;border-radius:3px;">$1</code>')
+    .replace(/\n/g, '<br>')
+    .replace(/((\|.+\|\n?)+)/g, match => {
+      const rows = match.trim().split('\n').filter(r => r.includes('|'));
+      const html = rows.map((row, i) => {
+        const cells = row.split('|').filter(c => c.trim() !== '');
+        if (cells.every(c => /^[-: ]+$/.test(c))) return '';
+        const tag = i === 0 ? 'th' : 'td';
+        return `<tr>${cells.map(c => `<${tag} style="padding:6px 10px;border:1px solid var(--border);font-size:12px;">${c.trim()}</${tag}>`).join('')}</tr>`;
+      }).join('');
+      return `<table style="border-collapse:collapse;margin:8px 0;">${html}</table>`;
+    });
+}
+
+/* ════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  showScreen('landing');
+  // keyboard shortcut
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeMapModal();
+  });
+});
+</script>
+</body>
+</html>
