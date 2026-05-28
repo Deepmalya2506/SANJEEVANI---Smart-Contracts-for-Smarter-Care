@@ -372,13 +372,16 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         if "error" in hospitals:
             return hospitals
 
+        # Filter out the source hospital (user's hospital)
+        hospitals_filtered = [h for h in hospitals if h["id"] != hospital_id]
+
         gis_input = [
             {
                 "id": h["id"],
                 "lat": h["location"]["lat"],
                 "lon": h["location"]["lon"]
             }
-            for h in hospitals
+            for h in hospitals_filtered
         ]
 
         res = safe_request(
@@ -389,6 +392,13 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
                 "hospitals": gis_input
             }
         )
+
+        # Filter result to exclude source hospital
+        if isinstance(res.get("data"), dict) and "all_options" in res["data"]:
+            res["data"]["all_options"] = [
+                h for h in res["data"]["all_options"] 
+                if h.get("id") != hospital_id
+            ]
 
         return res.get("data", res)   # 🔥 CRITICAL FIX
 
@@ -526,6 +536,7 @@ def run_agent(
     user_query: str,
     session_id: str,
     hospital_id: str = None,
+    conversation_history: list = None,
     notify: Callable[[str], None] = None) -> dict:
 
     

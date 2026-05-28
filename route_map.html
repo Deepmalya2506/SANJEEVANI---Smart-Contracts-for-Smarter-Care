@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_df1d9859535805694392c62dc0c5afc7 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_df1d9859535805694392c62dc0c5afc7" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_df1d9859535805694392c62dc0c5afc7 = L.map(
+                "map_df1d9859535805694392c62dc0c5afc7",
+                {
+                    center: [26.003172, 27.945944],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 14,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_4935f36520b27ef747df368d691dbf7a = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_4935f36520b27ef747df368d691dbf7a.addTo(map_df1d9859535805694392c62dc0c5afc7);
+        
+    
+            var poly_line_a896a30b76556e78b26502fd06c489c8 = L.polyline(
+                [[26.003172, 27.945944], [26.001668, 27.948087], [25.999949, 27.950884], [25.998948, 27.952424], [25.997921, 27.953891], [25.995503, 27.957019], [25.993895, 27.959122], [25.991718, 27.961941], [25.989768, 27.964467], [25.98896, 27.965524], [25.988401, 27.966409], [25.988049, 27.967101], [25.987651, 27.968032], [25.987388, 27.969091], [25.987005, 27.970955], [25.986616, 27.972645], [25.986378, 27.973662], [25.986098, 27.974512], [25.985527, 27.975617], [25.984999, 27.976395], [25.984391, 27.9771], [25.983827, 27.977623], [25.982631, 27.978444], [25.979251, 27.980786], [25.978602, 27.981309], [25.978006, 27.981907], [25.977435, 27.982543], [25.976743, 27.98357], [25.976128, 27.984788], [25.975841, 27.985557], [25.973808, 27.991096], [25.972972, 27.993347], [25.972258, 27.994993], [25.971344, 27.996914], [25.97044, 27.998628], [25.968337, 28.002198], [25.966818, 28.00485], [25.965868, 28.006682], [25.964877, 28.009276], [25.964312, 28.011108], [25.9639, 28.012932], [25.963719, 28.014238], [25.963295, 28.01754], [25.963107, 28.01901], [25.962865, 28.020633], [25.962212, 28.024058], [25.961062, 28.029567], [25.960324, 28.033078], [25.959993, 28.034467], [25.95954, 28.035605], [25.959159, 28.03631], [25.958443, 28.037354], [25.955915, 28.040323], [25.950168, 28.047114], [25.947059, 28.05074], [25.942662, 28.055976], [25.940101, 28.058986], [25.938873, 28.060557], [25.937272, 28.062797], [25.935832, 28.065149], [25.934483, 28.067705], [25.933436, 28.069945], [25.93259, 28.072051], [25.931919, 28.074043], [25.931919, 28.074043]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_df1d9859535805694392c62dc0c5afc7);
+        
+    
+            var marker_6363330333bdf3e3e542aab081ce9d7d = L.marker(
+                [26.003172, 27.945944],
+                {
+}
+            ).addTo(map_df1d9859535805694392c62dc0c5afc7);
+        
+    
+            marker_6363330333bdf3e3e542aab081ce9d7d.bindTooltip(
+                `<div>
+                     Start
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_dca450c16701643dc82cf146a7cd8a79 = L.marker(
+                [25.931919, 28.074043],
+                {
+}
+            ).addTo(map_df1d9859535805694392c62dc0c5afc7);
+        
+    
+            marker_dca450c16701643dc82cf146a7cd8a79.bindTooltip(
+                `<div>
+                     Destination
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+</script>
+</html>
