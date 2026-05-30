@@ -205,7 +205,7 @@ sanjeevani/
 - Autonomous resource allocation
 
 ---
-## Screenshots
+## Gallery 
 
 ### Inventory Dashboard
 
