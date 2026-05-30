@@ -244,6 +244,6 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-Made with ❤️ for Smarter Healthcare Infrastructure
+Smarter Care Health For Smart Health 
 
 </div>
