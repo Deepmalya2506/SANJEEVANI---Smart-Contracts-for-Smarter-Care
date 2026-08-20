@@ -9,3 +9,5 @@ python-multipart
 pydantic-settings
 fastmcp
 groq
+folium
+web3

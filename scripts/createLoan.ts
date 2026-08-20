@@ -1,19 +1,23 @@
 import { ethers } from "ethers";
-import { CONTRACT_ADDRESS } from "./config.js";
+import { CONTRACT_ADDRESS } from "./config";
 import fs from "fs";
 
 async function main() {
+  const provider = new ethers.providers.JsonRpcProvider(
+    "http://127.0.0.1:7545"
+  );
 
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-
-  const borrower = await provider.getSigner(0);
-  const lender = await provider.getSigner(1);
+  const borrower = provider.getSigner(0);
+  const lender = provider.getSigner(1);
 
   const borrowerAddr = await borrower.getAddress();
   const lenderAddr = await lender.getAddress();
 
   const artifact = JSON.parse(
-    fs.readFileSync("./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json","utf8")
+    fs.readFileSync(
+      "./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json",
+      "utf8"
+    )
   );
 
   const contract = new ethers.Contract(
@@ -34,28 +38,45 @@ async function main() {
 
   const total = rent + deposit;
 
+  console.log("Borrower:", borrowerAddr);
+  console.log("Lender:", lenderAddr);
+  console.log("Equipment ID:", equipmentId);
+  console.log("Quantity:", quantity);
+  console.log("Hours:", hours);
+  console.log("Rent:", rent);
+  console.log("Deposit:", deposit);
+  console.log("Total:", total);
+
   const tx = await contract.createLoanRequest(
     lenderAddr,
     equipmentId,
     quantity,
     hours,
-    { value: total }
+    {
+      value: total,
+    }
   );
+
+  console.log("Transaction:", tx.hash);
 
   await tx.wait();
 
   console.log("Loan created");
 
   const loanId = await contract.loanCounter();
+
+  console.log("Loan ID:", loanId.toString());
+
   const loan = await contract.loans(loanId);
 
-  console.log("Loan ID:", loanId);
-  
   console.log("Loan Data:", loan);
 
-  const balance = await provider.getBalance(contract.target);
-  console.log("Escrow Balance:", balance.toString());
+  const balance = await provider.getBalance(contract.address);
 
+  console.log("Escrow Balance:", balance.toString());
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

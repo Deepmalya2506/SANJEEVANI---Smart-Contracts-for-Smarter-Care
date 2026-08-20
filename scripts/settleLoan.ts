@@ -1,10 +1,10 @@
 import { ethers } from "ethers";
 import fs from "fs";
-import { CONTRACT_ADDRESS } from "./config.js";
+import { CONTRACT_ADDRESS } from "./config";
 
 async function main() {
 
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+  const provider = new ethers.providers.JsonRpcProvider("http://127.0.0.1:7545");
   const signer = await provider.getSigner(0);
 
   const artifact = JSON.parse(
