@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import fs from "fs";
 import { CONTRACT_ADDRESS } from "../scripts/config.js";
 
-const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+const provider = new ethers.JsonRpcProvider("http://127.0.0.1:7545");
 
 const artifact = JSON.parse(
   fs.readFileSync(

@@ -1,61 +1,201 @@
 import { ethers } from "ethers";
-import { CONTRACT_ADDRESS } from "./config.js";
+import { CONTRACT_ADDRESS } from "./config";
 import fs from "fs";
 
 async function main() {
 
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    /*
+        Usage:
 
-  const borrower = await provider.getSigner(0);
-  const lender = await provider.getSigner(1);
+        npx ts-node scripts/createLoan.ts \
+        BORROWER_ADDRESS \
+        LENDER_ADDRESS \
+        EQUIPMENT_ID \
+        QUANTITY \
+        DURATION_HOURS
+    */
 
-  const borrowerAddr = await borrower.getAddress();
-  const lenderAddr = await lender.getAddress();
+    const args = process.argv.slice(2);
 
-  const artifact = JSON.parse(
-    fs.readFileSync("./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json","utf8")
-  );
+    if (args.length !== 5) {
+        console.error(`
+Usage:
 
-  const contract = new ethers.Contract(
-    CONTRACT_ADDRESS,
-    artifact.abi,
-    borrower
-  );
+npx ts-node scripts/createLoan.ts BORROWER_ADDRESS LENDER_ADDRESS EQUIPMENT_ID QUANTITY DURATION_HOURS
 
-  const equipmentId = 1;
-  const quantity = 2;
-  const hours = 4;
+Example:
 
-  const hourlyRate = 500;
-  const caution = 2000;
+npx ts-node scripts/createLoan.ts 0xBORROWER 0xLENDER 1 1 48
+        `);
 
-  const rent = hourlyRate * quantity * hours;
-  const deposit = caution * quantity;
+        process.exit(1);
+    }
 
-  const total = rent + deposit;
+    const borrowerAddress = ethers.utils.getAddress(args[0]);
+    const lenderAddress = ethers.utils.getAddress(args[1]);
 
-  const tx = await contract.createLoanRequest(
-    lenderAddr,
-    equipmentId,
-    quantity,
-    hours,
-    { value: total }
-  );
+    const equipmentId = Number(args[2]);
+    const quantity = Number(args[3]);
+    const durationHours = Number(args[4]);
 
-  await tx.wait();
+    if (equipmentId <= 0 || quantity <= 0 || durationHours <= 0) {
+        throw new Error(
+            "Equipment ID, quantity and duration must be greater than zero."
+        );
+    }
 
-  console.log("Loan created");
+    const provider =
+        new ethers.providers.JsonRpcProvider(
+            "http://127.0.0.1:7545"
+        );
 
-  const loanId = await contract.loanCounter();
-  const loan = await contract.loans(loanId);
+    const accounts = await provider.listAccounts();
 
-  console.log("Loan ID:", loanId);
-  
-  console.log("Loan Data:", loan);
+    const normalizedAccounts =
+        accounts.map((a) => a.toLowerCase());
 
-  const balance = await provider.getBalance(contract.target);
-  console.log("Escrow Balance:", balance.toString());
+    if (!normalizedAccounts.includes(
+        borrowerAddress.toLowerCase()
+    )) {
+        throw new Error(
+            "Borrower address is not controlled by Ganache."
+        );
+    }
 
+    if (!normalizedAccounts.includes(
+        lenderAddress.toLowerCase()
+    )) {
+        throw new Error(
+            "Lender address is not controlled by Ganache."
+        );
+    }
+
+    const borrowerSigner =
+        provider.getSigner(borrowerAddress);
+
+    const artifact = JSON.parse(
+        fs.readFileSync(
+            "./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json",
+            "utf8"
+        )
+    );
+
+    const contract =
+        new ethers.Contract(
+            CONTRACT_ADDRESS,
+            artifact.abi,
+            borrowerSigner
+        );
+
+    console.log("\n======================================");
+    console.log(" SANJEEVANI LOAN REQUEST");
+    console.log("======================================");
+
+    console.log("Borrower:", borrowerAddress);
+    console.log("Lender:", lenderAddress);
+    console.log("Equipment ID:", equipmentId);
+    console.log("Quantity:", quantity);
+    console.log("Duration:", `${durationHours} hours`);
+
+    // ------------------------------------------------------------
+    // CHECK EQUIPMENT
+    // ------------------------------------------------------------
+
+    const equipment =
+        await contract.equipments(equipmentId);
+
+    if (!equipment.exists) {
+        throw new Error(
+            "Equipment does not exist."
+        );
+    }
+
+    console.log("\nEquipment:");
+    console.log("Owner:", equipment.owner);
+    console.log("Name:", equipment.name);
+    console.log(
+        "Hourly rate:",
+        equipment.hourlyRate.toString()
+    );
+    console.log(
+        "Caution deposit:",
+        equipment.cautionDeposit.toString()
+    );
+
+    // ------------------------------------------------------------
+    // CALCULATE PAYMENT
+    // ------------------------------------------------------------
+
+    const rent =
+        equipment.hourlyRate
+            .mul(quantity)
+            .mul(durationHours);
+
+    const deposit =
+        equipment.cautionDeposit
+            .mul(quantity);
+
+    const total =
+        rent.add(deposit);
+
+    console.log("\nFinancials:");
+    console.log("Rent:", rent.toString());
+    console.log("Deposit:", deposit.toString());
+    console.log("Total:", total.toString());
+
+    // ------------------------------------------------------------
+    // CREATE LOAN
+    // ------------------------------------------------------------
+
+    console.log("\nCreating loan...");
+
+    const tx =
+        await contract.createLoanRequest(
+            lenderAddress,
+            equipmentId,
+            quantity,
+            durationHours,
+            {
+                value: total
+            }
+        );
+
+    console.log(
+        "Transaction:",
+        tx.hash
+    );
+
+    const receipt =
+        await tx.wait();
+
+    console.log(
+        "Block:",
+        receipt.blockNumber
+    );
+
+    console.log(
+        "\n✅ Loan request created successfully."
+    );
+
+    console.log(
+        "======================================\n"
+    );
 }
 
-main();
+main().catch((error) => {
+
+    console.error(
+        "\n❌ Loan request failed."
+    );
+
+    if (error.reason) {
+        console.error(
+            "Reason:",
+            error.reason
+        );
+    } else {
+        console.error(error.message);
+    }
+
+    process.exit(1);
+});

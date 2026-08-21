@@ -1,19 +1,152 @@
 from fastapi import APIRouter, HTTPException
+
 from app.core.database import hospital_collection
+from app.services.blockchain_client import is_registered_wallet
+from app.schemas.hospital import HospitalCreate
+
 import hashlib
-import json
-from datetime import datetime, timedelta
 import secrets
+
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
-# In-memory session store (use Redis in production)
+# In-memory session store
+# Use Redis/JWT in production.
 _sessions = {}
 
 @router.post("/hospitals")
-def create_hospital(data: dict):
-    hospital_collection.insert_one(data)
-    return {"message": "Hospital created"}
+def create_hospital(data: HospitalCreate):
+
+    # ---------------------------------------------------------
+    # CHECK DUPLICATE HOSPITAL ID
+    # ---------------------------------------------------------
+
+    existing_hospital = hospital_collection.find_one(
+        {"id": data.id}
+    )
+
+    if existing_hospital:
+
+        raise HTTPException(
+            status_code=409,
+            detail="Hospital ID already exists"
+        )
+
+    # ---------------------------------------------------------
+    # NORMALIZE WALLET
+    # ---------------------------------------------------------
+
+    wallet = data.wallet.strip()
+
+    # ---------------------------------------------------------
+    # CHECK BLOCKCHAIN REGISTRATION
+    # ---------------------------------------------------------
+
+    try:
+
+        registered = is_registered_wallet(
+            wallet
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=503,
+            detail=f"Blockchain unavailable: {str(e)}"
+        )
+
+    if not registered:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Wallet is not registered on the "
+                "Sanjeevani blockchain. "
+                "Register the hospital wallet first."
+            )
+        )
+
+    # ---------------------------------------------------------
+    # CHECK WALLET NOT ALREADY LINKED
+    # ---------------------------------------------------------
+
+    existing_wallet = hospital_collection.find_one(
+        {"wallet": wallet}
+    )
+
+    if existing_wallet:
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This wallet is already linked to "
+                "another hospital."
+            )
+        )
+
+    # ---------------------------------------------------------
+    # BUILD MONGODB DOCUMENT
+    # ---------------------------------------------------------
+
+    hospital_document = {
+
+        "id": data.id,
+
+        "name": data.name,
+
+        "wallet": wallet,
+
+        "location": {
+            "lat": data.location.lat,
+            "lon": data.location.lon
+        }
+    }
+
+    # ---------------------------------------------------------
+    # OPTIONAL LOGIN CREDENTIALS
+    # ---------------------------------------------------------
+
+    if data.email:
+
+        hospital_document["email"] = data.email
+
+    if data.password:
+
+        hospital_document["password"] = (
+            hashlib.sha256(
+                data.password.encode()
+            ).hexdigest()
+        )
+
+    # ---------------------------------------------------------
+    # INSERT
+    # ---------------------------------------------------------
+
+    hospital_collection.insert_one(
+        hospital_document
+    )
+
+    return {
+
+        "success": True,
+
+        "message": "Hospital created successfully",
+
+        "hospital": {
+
+            "id": data.id,
+
+            "name": data.name,
+
+            "wallet": wallet,
+
+            "location": {
+                "lat": data.location.lat,
+                "lon": data.location.lon
+            }
+        }
+    }
 
 @router.get("/hospitals")
 def get_hospitals():

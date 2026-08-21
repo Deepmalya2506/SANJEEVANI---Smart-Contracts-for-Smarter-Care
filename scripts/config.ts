@@ -1,0 +1,2 @@
+// config.js
+export const CONTRACT_ADDRESS = "0x7f56025c450C0e94069751B602B63400a610ce81";
