@@ -12,9 +12,9 @@ import json
 import uuid
 from typing import Optional
 
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from mcp_server.main import run_agent, clear_session
@@ -69,11 +69,7 @@ def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
 
     # Notification callback — puts messages into the SSE queue
-    loop = asyncio.new_event_loop()
-
-    notifications = []
     def notify(msg: str):
-        notifications.append(msg)
         # Also push to SSE queue if a stream listener is active
         q = _notification_queues.get(session_id)
         if q:

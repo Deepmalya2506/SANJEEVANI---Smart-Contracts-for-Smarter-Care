@@ -21,7 +21,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Connection ────────────────────────────────────────────────────────────────
-RPC_URL          = os.getenv("BLOCKCHAIN_RPC_URL", "http://127.0.0.1:8545")
+RPC_URL          = os.getenv(
+  "BLOCKCHAIN_RPC_URL",
+  os.getenv("BLOCKCHAIN_URL", "http://127.0.0.1:7545")
+)
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")          # set after deploy
 PRIVATE_KEY      = os.getenv("DEPLOYER_PRIVATE_KEY")      # hardhat account #0
 
@@ -174,20 +177,28 @@ def _get_contract():
     )
 
 def _account():
-    return w3.eth.account.from_key(PRIVATE_KEY)
+    if PRIVATE_KEY:
+        return w3.eth.account.from_key(PRIVATE_KEY)
+    if w3.is_connected() and w3.eth.accounts:
+        return w3.eth.accounts[0]
+    raise ValueError("Set DEPLOYER_PRIVATE_KEY or connect to an unlocked local account")
 
 def _send_tx(fn, value_wei=0):
     """Build, sign and send a transaction. Returns receipt dict."""
     account = _account()
+    account_address = account.address if PRIVATE_KEY else account
     tx = fn.build_transaction({
-        "from":     account.address,
-        "nonce":    w3.eth.get_transaction_count(account.address),
+        "from":     account_address,
+        "nonce":    w3.eth.get_transaction_count(account_address),
         "gas":      500_000,
         "gasPrice": w3.eth.gas_price,
         "value":    value_wei,
     })
-    signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    if PRIVATE_KEY:
+        signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    else:
+        tx_hash = w3.eth.send_transaction(tx)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
     return {
         "tx_hash":     tx_hash.hex(),

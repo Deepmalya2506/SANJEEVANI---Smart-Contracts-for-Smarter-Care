@@ -537,20 +537,6 @@ def run_agent(
             from_hospital = get_hospital_by_id(approval["from_hospital_id"])
             to_hospital   = get_hospital_by_id(hospital_id)
 
-            loc = get_hospital_location(hospital_id)
-
-            # dispatch
-            dispatch_result = execute_tool("dispatch", {
-                "equipment_type": approval["equipment_type"],
-                "quantity": approval["quantity"],
-                "from_hospital_id": approval["from_hospital_id"],
-                "to_hospital_id": hospital_id,
-                "location": {
-                    "lat": loc["lat"],
-                    "lon": loc["lon"]
-                }
-            }, hospital_id, session_id)
-
             # blockchain
             loan_result = execute_tool("create_blockchain_loan", {
                 "lender_wallet": from_hospital["wallet"],   # ✅ FIXED
@@ -559,6 +545,9 @@ def run_agent(
                 "duration_hours": approval["duration_hours"],
                 "borrower_wallet": to_hospital["wallet"]    # ✅ FIXED
             }, hospital_id, session_id)
+
+            if "error" in loan_result:
+                return {"reply": "Blockchain loan failed", "error": loan_result["error"]}
 
             return {
                 "reply": "✅ Loan approved and created successfully",

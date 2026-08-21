@@ -1,6 +1,7 @@
 {
   "name": "SANJEEVANi",
   "version": "1.0.0",
+  "scripts": {},
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@types/chai": "^5.2.3",

@@ -1,9 +1,8 @@
 from web3 import Web3
 import json
 from app.core.config import settings
-from web3 import Web3
 
-w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
+w3 = Web3(Web3.HTTPProvider(settings.BLOCKCHAIN_URL))
 
 # Load ABI (IMPORTANT: use compiled artifact, not .sol)
 with open("artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json") as f:
@@ -20,6 +19,14 @@ account = w3.eth.accounts[0]
 
 def create_loan(data):
     lender = Web3.to_checksum_address(data["lender"])
+    equipment = contract.functions.equipments(data["equipment_id"]).call()
+    if not equipment[4]:
+        raise ValueError("Equipment is not registered")
+
+    rent = equipment[2] * data["quantity"] * data["duration"]
+    deposit = equipment[3] * data["quantity"]
+    total_value = rent + deposit
+
     tx = contract.functions.createLoanRequest(
         lender,
         data["equipment_id"],
@@ -27,7 +34,7 @@ def create_loan(data):
         data["duration"]
     ).build_transaction({
         "from": account,
-        "value": data["value"],
+        "value": total_value,
         "nonce": w3.eth.get_transaction_count(account),
         "gas": 3000000,
         "gasPrice": w3.to_wei("1", "gwei")

@@ -1,28 +1,32 @@
 import { ethers } from "ethers";
-import { CONTRACT_ADDRESS } from "./config.js";
+import { CONTRACT_ADDRESS } from "./config";
 import fs from "fs";
 
 async function main() {
-
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+  const provider = new ethers.providers.JsonRpcProvider(
+    "http://127.0.0.1:7545",
+  );
   const signer = await provider.getSigner(0);
 
   const artifact = JSON.parse(
-    fs.readFileSync("./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json","utf8")
+    fs.readFileSync(
+      "./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json",
+      "utf8",
+    ),
   );
 
-  const contract = new ethers.Contract(
-    CONTRACT_ADDRESS,
-    artifact.abi,
-    signer
-  );
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, artifact.abi, signer);
 
   const existing = await contract.equipments(1);
 
   if (!existing.exists) {
-    await (await contract.registerEquipment("Oxygen Cylinder",500,2000)).wait();
-    await (await contract.registerEquipment("Ventilator",2000,15000)).wait();
-    await (await contract.registerEquipment("Defibrillator",1200,5000)).wait();
+    await (
+      await contract.registerEquipment("Oxygen Cylinder", 500, 2000)
+    ).wait();
+    await (await contract.registerEquipment("Ventilator", 2000, 15000)).wait();
+    await (
+      await contract.registerEquipment("Defibrillator", 1200, 5000)
+    ).wait();
   }
 
   console.log(await contract.equipments(1));
