@@ -3,6 +3,7 @@
 # SANJEEVANI
 
 ### Smart Contracts for Smarter Care
+
 <img src="./docs/images/image.png" alt="Sanjeevani Landing Page" width="100%"/>
 
 Healthcare logistics powered by Smart Contracts, MCP Nodes, and GIS Routing.
@@ -98,8 +99,8 @@ Hospitals can discover available equipment across participating nodes instantly.
 ---
 
 ## System Architecture
-![Architecture Diagram](./docs/images/systemarch.png)
 
+![Architecture Diagram](./docs/images/systemarch.png)
 
 ---
 
@@ -107,15 +108,13 @@ Hospitals can discover available equipment across participating nodes instantly.
 
 ### Frontend
 
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
+- Lightweight HTML and JavaScript client in `visuals/`
 
 ### Backend
 
-- Node.js
-- Express.js
+- Python
+- FastAPI
+- Uvicorn
 
 ### Blockchain
 
@@ -125,7 +124,7 @@ Hospitals can discover available equipment across participating nodes instantly.
 ### GIS & Mapping
 
 - OpenStreetMap
-- Routing Engine
+- OSRM routing service
 
 ### Protocol Layer
 
@@ -133,32 +132,196 @@ Hospitals can discover available equipment across participating nodes instantly.
 
 ---
 
-## Getting Started
+## Installation
 
-### Clone Repository
+The current repository contains three local services:
 
-```bash
-git clone https://github.com/your-username/sanjeevani.git
+| Service         | URL                     | Purpose                                          |
+| --------------- | ----------------------- | ------------------------------------------------ |
+| FastAPI backend | `http://127.0.0.1:8000` | Hospitals, inventory, dispatch                   |
+| GIS engine      | `http://127.0.0.1:8001` | Routing and nearest-hospital selection           |
+| MCP server      | `http://127.0.0.1:9001` | Natural-language orchestration and approval flow |
 
-cd sanjeevani
-```
+It also uses MongoDB and a local Ganache JSON-RPC node at `http://127.0.0.1:7545`.
 
-### Install Dependencies
+### Prerequisites
 
-```bash
+- Windows PowerShell
+- Node.js and npm
+- Python 3.11 or newer
+- Ganache Desktop or another Ethereum-compatible node listening on port `7545`
+- A MongoDB database reachable using `MONGO_URI`
+- Internet access for the public OSRM routing service and Groq API
+
+### Clone and Install
+
+```powershell
+git clone <repository-url>
+Set-Location SANJEEVANI---Smart-Contracts-for-Smarter-Care
+
 npm install
+
+py -3 -m venv .venv
+\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-### Run Development Server
+The Python blockchain integration requires `web3`. If it is not already listed in your local requirements file, install it with:
 
-```bash
-npm run dev
+```powershell
+pip install web3
 ```
 
-Application will start at:
+### Configure Environment
 
-```bash
-http://localhost:3000
+Create a `.env` file in the repository root. Do not commit it.
+
+```env
+MONGO_URI=<your MongoDB connection string>
+DB_NAME=sanjeevani
+GIS_URL=http://127.0.0.1:8001
+BLOCKCHAIN_URL=http://127.0.0.1:7545
+CONTRACT_ADDRESS=<deployed contract address>
+GROQ_API_KEY=<your Groq API key>
+```
+
+The MCP server also accepts `BLOCKCHAIN_RPC_URL`; when it is absent, it uses `BLOCKCHAIN_URL`.
+
+### Start the Blockchain
+
+Start Ganache and configure its RPC server to use port `7545`. Keep Ganache running while using the backend or MCP server.
+
+Compile and deploy the contract from the repository root:
+
+```powershell
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network localhost
+```
+
+Copy the deployed address into both `.env` as `CONTRACT_ADDRESS` and `scripts/config.ts`. Then register the equipment used by the workflow:
+
+```powershell
+npx hardhat run scripts/registerEquipment.ts --network localhost
+```
+
+Equipment IDs currently used by the system are:
+
+| ID  | Equipment       | Hourly rate | Caution deposit |
+| --- | --------------- | ----------: | --------------: |
+| `1` | Oxygen Cylinder |       `500` |          `2000` |
+| `2` | Ventilator      |      `2000` |         `15000` |
+| `3` | Defibrillator   |      `1200` |          `5000` |
+
+If Ganache is reset, redeploy the contract, update the address, and register the equipment again.
+
+### Start the GIS Engine
+
+Open a new PowerShell terminal from the repository root:
+
+```powershell
+\.venv\Scripts\Activate.ps1
+python -m uvicorn GIS_engine.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+The GIS engine calls `router.project-osrm.org`, so its routing features need internet access.
+
+### Start the FastAPI Backend
+
+Open another PowerShell terminal:
+
+```powershell
+\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+The backend needs MongoDB, Ganache, and the GIS engine running. Seed hospitals and inventory through the backend endpoints before dispatching. Hospital records require an `id`, `wallet`, and `location`; inventory records require a matching `hospital_id`, numeric `equipment_type`, and `status` set to `AVAILABLE`.
+
+### Start the MCP Server
+
+Open a fourth PowerShell terminal:
+
+```powershell
+\.venv\Scripts\Activate.ps1
+python -m uvicorn mcp_server.wrapper:app --host 127.0.0.1 --port 9001 --reload
+```
+
+Check that it is running:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:9001/health
+```
+
+The MCP chat endpoint expects `query`, not `message`:
+
+```powershell
+$body = @{
+	query = "List the available hospitals"
+	hospital_id = "h1"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+	-Uri http://127.0.0.1:9001/chat `
+	-Method Post `
+	-ContentType "application/json" `
+	-Body $body | ConvertTo-Json -Depth 10
+```
+
+### Test the Borrow Workflow
+
+Borrowing requests require two chat calls because the MCP pauses for explicit approval. First send the request:
+
+```powershell
+$body = @{
+	query = "Borrow me an oxygen cylinder from the nearest available hospital. My location is (25.2, 25.8)."
+	hospital_id = "h1"
+} | ConvertTo-Json
+
+$proposal = Invoke-RestMethod `
+	-Uri http://127.0.0.1:9001/chat `
+	-Method Post `
+	-ContentType "application/json" `
+	-Body $body
+
+$proposal | ConvertTo-Json -Depth 10
+```
+
+The response should contain `approval_required: true` and a `session_id`. Approve that proposal using the same session:
+
+```powershell
+$approval = @{
+	query = "yes"
+	session_id = $proposal.session_id
+	hospital_id = "h1"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+	-Uri http://127.0.0.1:9001/chat `
+	-Method Post `
+	-ContentType "application/json" `
+	-Body $approval | ConvertTo-Json -Depth 10
+```
+
+A successful approval returns a transaction hash and loan ID. The smart contract loan counter should increase by one.
+
+### Direct API Checks
+
+Check the backend and GIS services independently:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/hospitals
+
+$dispatch = @{
+	equipment_type = 1
+	quantity = 1
+	location = @{ lat = 25.2; lon = 27.2 }
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+	-Uri http://127.0.0.1:8000/dispatch `
+	-Method Post `
+	-ContentType "application/json" `
+	-Body $dispatch | ConvertTo-Json -Depth 10
 ```
 
 ---
@@ -166,18 +329,14 @@ http://localhost:3000
 ## Project Structure
 
 ```text
-sanjeevani/
-│
-├── app/
-├── components/
-├── public/
-├── smart-contracts/
-├── mcp/
-├── gis/
-├── docs/
-│
-├── package.json
-└── README.md
+app/                  FastAPI backend and REST routes
+GIS_engine/           Routing and distance services
+mcp_server/           Natural-language agent and chat API
+contracts/            Solidity escrow contract
+scripts/              Deployment and contract lifecycle scripts
+listeners/             Blockchain event listener
+visuals/               Lightweight chat UI assets
+docs/                  Architecture and product images
 ```
 
 ---
@@ -205,7 +364,8 @@ sanjeevani/
 - Autonomous resource allocation
 
 ---
-## Gallery 
+
+## Gallery
 
 ### Inventory Dashboard
 
@@ -244,6 +404,6 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-Smarter Care Health For Smart Health 
+Smarter Care Health For Smart Health
 
 </div>

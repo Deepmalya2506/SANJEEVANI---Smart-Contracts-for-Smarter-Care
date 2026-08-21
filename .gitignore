@@ -3,6 +3,7 @@
 
 # venv
 venv/
+.venv
 
 # Compilation output
 /dist
