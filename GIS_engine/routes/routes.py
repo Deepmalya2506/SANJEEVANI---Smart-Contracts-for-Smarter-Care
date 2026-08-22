@@ -63,7 +63,7 @@ def isochrone_map_api(request: IsochroneRequest):
         radius_km
     )
 
-    from services.visualization_service import create_isochrone_map
+    from GIS_engine.services.visualization_service import create_isochrone_map
 
     m = create_isochrone_map(
         request.center.dict(),

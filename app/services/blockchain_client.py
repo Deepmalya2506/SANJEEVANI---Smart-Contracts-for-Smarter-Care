@@ -1,23 +1,29 @@
 from web3 import Web3
 import json
+from pathlib import Path
 from app.core.config import settings
 
 w3 = Web3(Web3.HTTPProvider(settings.BLOCKCHAIN_URL))
 
-# Load ABI (IMPORTANT: use compiled artifact, not .sol)
-with open("artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json") as f:
-    contract_json = json.load(f)
-    abi = contract_json["abi"]
+def get_contract_and_account():
+    artifact_path = Path(__file__).resolve().parents[2] / "artifacts" / "contracts" / "SanjeevaniEscrow.sol" / "SanjeevaniEscrow.json"
+    if not artifact_path.exists():
+        raise FileNotFoundError(
+            f"Compiled contract artifact not found at {artifact_path}. Run 'npx hardhat compile'."
+        )
 
-contract = w3.eth.contract(
-    address=w3.to_checksum_address(settings.CONTRACT_ADDRESS),
-    abi=abi
-)
+    with artifact_path.open(encoding="utf-8") as artifact_file:
+        abi = json.load(artifact_file)["abi"]
 
-account = w3.eth.accounts[0]
+    contract = w3.eth.contract(
+        address=w3.to_checksum_address(settings.CONTRACT_ADDRESS),
+        abi=abi,
+    )
+    return contract, w3.eth.accounts[0]
 
 
 def create_loan(data):
+    contract, account = get_contract_and_account()
     lender = Web3.to_checksum_address(data["lender"])
     equipment = contract.functions.equipments(data["equipment_id"]).call()
     if not equipment[4]:

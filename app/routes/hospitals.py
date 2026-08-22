@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 from app.core.database import hospital_collection
+from app.schemas.hospital import HospitalCreate
 
 router = APIRouter()
 
 @router.post("/hospitals")
-def create_hospital(data: dict):
-    hospital_collection.insert_one(data)
+def create_hospital(data: HospitalCreate):
+    hospital_collection.insert_one(data.model_dump())
     return {"message": "Hospital created"}
 
 @router.get("/hospitals")
