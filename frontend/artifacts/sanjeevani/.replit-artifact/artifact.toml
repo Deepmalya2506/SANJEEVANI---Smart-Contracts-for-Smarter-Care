@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Sanjeevani Medical Logistics"
+description = "A frontend-only AI emergency medical logistics control room with a calm nature-led home, live dispatch dashboard, marketplace, analytics console, and Sanjeevani MCP assistant."
+version = "1.0.0"
+id = "artifacts/sanjeevani"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25638
+
+[services.development]
+run = "pnpm --filter @workspace/sanjeevani run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sanjeevani", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sanjeevani/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25638"
+BASE_PATH = "/"
