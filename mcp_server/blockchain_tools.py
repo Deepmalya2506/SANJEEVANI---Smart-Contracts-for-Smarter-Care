@@ -169,12 +169,14 @@ LOAN_STATUSES = {
 # ── Contract instance ─────────────────────────────────────────────────────────
 
 def _get_contract():
-    if not CONTRACT_ADDRESS:
-        raise ValueError("CONTRACT_ADDRESS not set in .env")
-    return w3.eth.contract(
-        address=Web3.to_checksum_address(CONTRACT_ADDRESS),
-        abi=ABI
-    )
+  if not CONTRACT_ADDRESS:
+    raise ValueError("CONTRACT_ADDRESS not set in .env")
+  if not Web3.is_address(CONTRACT_ADDRESS):
+    raise ValueError(f"Invalid CONTRACT_ADDRESS in .env: {CONTRACT_ADDRESS}")
+  return w3.eth.contract(
+    address=Web3.to_checksum_address(CONTRACT_ADDRESS),
+    abi=ABI,
+  )
 
 def _account():
     if PRIVATE_KEY:
