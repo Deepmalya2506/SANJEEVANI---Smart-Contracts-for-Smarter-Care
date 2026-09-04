@@ -132,22 +132,23 @@ Hospitals can discover available equipment across participating nodes instantly.
 
 ---
 
-## Installation
+## Installation and Local Run
 
-The current repository contains three local services:
+The complete local stack contains five application components plus MongoDB:
 
 | Service         | URL                     | Purpose                                          |
 | --------------- | ----------------------- | ------------------------------------------------ |
 | FastAPI backend | `http://127.0.0.1:8000` | Hospitals, inventory, dispatch                   |
 | GIS engine      | `http://127.0.0.1:8001` | Routing and nearest-hospital selection           |
 | MCP server      | `http://127.0.0.1:9001` | Natural-language orchestration and approval flow |
+| Frontend        | `http://localhost:5173` | Sanjeevani web application                       |
 
 It also uses MongoDB and a local Ganache JSON-RPC node at `http://127.0.0.1:7545`.
 
 ### Prerequisites
 
 - Windows PowerShell
-- Node.js and npm
+- Node.js and pnpm
 - Python 3.11 or newer
 - Ganache Desktop or another Ethereum-compatible node listening on port `7545`
 - A MongoDB database reachable using `MONGO_URI`
@@ -167,6 +168,17 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+Set up the frontend workspace separately:
+
+```powershell
+Set-Location frontend
+pnpm install
+Set-Location ..
+```
+
+If PowerShell blocks activation, use the environment interpreter directly in all
+commands below, for example `\.venv\Scripts\python.exe -m uvicorn ...`.
+
 The Python blockchain integration requires `web3`. If it is not already listed in your local requirements file, install it with:
 
 ```powershell
@@ -178,17 +190,24 @@ pip install web3
 Create a `.env` file in the repository root. Do not commit it.
 
 ```env
-MONGO_URI=<your MongoDB connection string>
+MONGO_URI=mongodb://127.0.0.1:27017
 DB_NAME=sanjeevani
 GIS_URL=http://127.0.0.1:8001
 BLOCKCHAIN_URL=http://127.0.0.1:7545
-CONTRACT_ADDRESS=<deployed contract address>
+CONTRACT_ADDRESS=<address printed by the deploy command>
 GROQ_API_KEY=<your Groq API key>
 ```
 
-The MCP server also accepts `BLOCKCHAIN_RPC_URL`; when it is absent, it uses `BLOCKCHAIN_URL`.
+The MCP server also accepts `BLOCKCHAIN_RPC_URL`; when it is absent, it uses
+`BLOCKCHAIN_URL`. `CONTRACT_ADDRESS` must be updated whenever Ganache is reset
+and the contract is deployed again.
 
-### Start the Blockchain
+### Start MongoDB
+
+Start MongoDB using your local installation or MongoDB service. It must be
+reachable at the `MONGO_URI` configured above before starting the backend.
+
+### Start Ganache and Deploy the Contract
 
 Start Ganache and configure its RPC server to use port `7545`. Keep Ganache running while using the backend or MCP server.
 
@@ -199,7 +218,8 @@ npx hardhat compile
 npx hardhat run scripts/deploy.ts --network localhost
 ```
 
-Copy the deployed address into both `.env` as `CONTRACT_ADDRESS` and `scripts/config.ts`. Then register the equipment used by the workflow:
+Copy the printed address into `.env` as `CONTRACT_ADDRESS` and into
+`scripts/config.ts`. Then register the default equipment:
 
 ```powershell
 npx hardhat run scripts/registerEquipment.ts --network localhost
@@ -215,35 +235,34 @@ Equipment IDs currently used by the system are:
 
 If Ganache is reset, redeploy the contract, update the address, and register the equipment again.
 
+Keep Ganache running on port `7545` while using the application.
+
 ### Start the GIS Engine
 
-Open a new PowerShell terminal from the repository root:
+Open **Terminal 1** from the repository root:
 
 ```powershell
-\.venv\Scripts\Activate.ps1
-python -m uvicorn GIS_engine.main:app --host 127.0.0.1 --port 8001 --reload
+\.venv\Scripts\python.exe -m uvicorn GIS_engine.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 The GIS engine calls `router.project-osrm.org`, so its routing features need internet access.
 
 ### Start the FastAPI Backend
 
-Open another PowerShell terminal:
+Open **Terminal 2** from the repository root:
 
 ```powershell
-\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The backend needs MongoDB, Ganache, and the GIS engine running. Seed hospitals and inventory through the backend endpoints before dispatching. Hospital records require an `id`, `wallet`, and `location`; inventory records require a matching `hospital_id`, numeric `equipment_type`, and `status` set to `AVAILABLE`.
 
 ### Start the MCP Server
 
-Open a fourth PowerShell terminal:
+Open **Terminal 3** from the repository root:
 
 ```powershell
-\.venv\Scripts\Activate.ps1
-python -m uvicorn mcp_server.wrapper:app --host 127.0.0.1 --port 9001 --reload
+\.venv\Scripts\python.exe -m uvicorn mcp_server.wrapper:app --host 127.0.0.1 --port 9001 --reload
 ```
 
 Check that it is running:
@@ -251,6 +270,44 @@ Check that it is running:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:9001/health
 ```
+
+### Start the Frontend
+
+Open **Terminal 4** and run from the frontend package directory:
+
+```powershell
+Set-Location frontend\artifacts\sanjeevani
+
+$env:PORT="5173"
+$env:BASE_PATH="/"
+$env:VITE_USE_MOCKS="false"
+$env:VITE_API_BASE_URL="http://127.0.0.1:8000"
+$env:VITE_GIS_API_BASE_URL="http://127.0.0.1:8001"
+$env:VITE_MCP_API_BASE_URL="http://127.0.0.1:9001"
+
+pnpm dev
+```
+
+Open the application at <http://localhost:5173>. Keep all four terminals and
+Ganache running. The frontend uses the backend for hospitals, inventory,
+dispatch, and events; the GIS and MCP URLs are configured separately because
+they are separate services.
+
+### Verify the Stack
+
+Run these checks from another PowerShell terminal:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/openapi.json
+Invoke-RestMethod http://127.0.0.1:8000/hospitals
+Invoke-RestMethod http://127.0.0.1:9001/health
+Invoke-RestMethod http://127.0.0.1:8001/openapi.json
+```
+
+The GIS API documentation is available at
+<http://127.0.0.1:8001/docs>, the backend documentation at
+<http://127.0.0.1:8000/docs>, and the MCP documentation at
+<http://127.0.0.1:9001/docs>.
 
 The MCP chat endpoint expects `query`, not `message`:
 
