@@ -1,6 +1,19 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class HFRVerificationRequest(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	mvp_hfr_id: str = Field(min_length=1, max_length=100)
+	hospital_name: str = Field(min_length=1, max_length=300)
+
+
+class HFRVerificationResponse(BaseModel):
+	verified: bool
+	directory_match: bool
+	mvp_hfr_id: str
+	hospital_name: str | None = None
+	message: str
 class Location(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -26,3 +39,4 @@ class HospitalCreate(BaseModel):
 		except ValueError as error:
 			raise ValueError("wallet must contain hexadecimal characters") from error
 		return value
+from pydantic import BaseModel, ConfigDict, Field, field_validator

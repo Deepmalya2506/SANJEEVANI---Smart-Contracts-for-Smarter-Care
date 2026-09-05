@@ -30,3 +30,7 @@ def loan_settled(data: LoanEvent):
         {"$set": {"status": "AVAILABLE"}}
     )
     return {"status": "updated"}
+
+
+    
+
