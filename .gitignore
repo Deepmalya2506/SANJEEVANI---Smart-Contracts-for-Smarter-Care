@@ -3,6 +3,7 @@
 
 # venv
 venv/
+.venv
 
 # Compilation output
 /dist
@@ -25,3 +26,10 @@ venv/
 # .env var
 .env
 .txt
+
+# db
+/supabase
+
+.agents
+
+.vscode

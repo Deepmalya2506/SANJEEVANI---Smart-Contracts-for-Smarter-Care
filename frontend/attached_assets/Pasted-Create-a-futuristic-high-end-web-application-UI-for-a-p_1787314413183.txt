@@ -1,0 +1,406 @@
+Create a futuristic, high-end web application UI for a project named "Sanjeevani" — an AI-powered emergency medical logistics platform.
+
+🎯 Core Design Direction
+
+Theme: Dark, futuristic, medical-tech + cosmic intelligence
+
+Inspiration: Blend of space satellite view + AI neural energy + healthcare urgency
+
+please avoid glow effects and neon colours keep it professional
+
+Effects: Glassmorphism + glow + soft gradients + particle effects
+
+🧠 UX Philosophy
+
+This is NOT a normal website.
+
+It should feel like:
+
+"You are inside a live AI emergency control system"
+
+Fully web app dashboard, not a scroll website
+
+Responsive for desktop (primary focus), tablet secondary
+
+Smooth transitions everywhere (no hard cuts)
+
+Micro-interactions on hover, click, loading
+
+🌌 Background Experience (VERY IMPORTANT)
+
+Animated satellite-style earth view (night city lights like Kolkata)
+
+Slow moving camera pan (like orbiting Earth)
+
+Subtle glowing routes/paths showing logistics movement
+
+Floating particles ("purple magic dust") reacting to cursor movement
+
+🗺 Main Dashboard Layout
+
+LEFT PANEL (Glass Card)
+
+"Request Equipment"
+
+Select hospital (dropdown or auto-detected)
+
+Equipment type (oxygen, ventilator etc.)
+
+Nearby lenders list:
+
+Distance (time-based: 12 min, 15 min)
+
+Availability
+
+Cost
+
+CTA Button: "Request Now" (glowing gradient)
+
+CENTER (HERO AREA)
+
+Interactive map (satellite styled)
+
+Pulsing nodes for hospitals
+
+Isochrone rings (15 min reach area glowing)
+
+Animated connection line when request initiated
+
+RIGHT PANEL
+
+Live Status Card
+
+IN_TRANSIT / DELIVERED / ESCROW LOCKED
+
+Timeline activity log (animated updates)
+
+QR + transaction hash section (blockchain feel)
+
+🤖 MCP AI ASSISTANT (KEY FEATURE)
+
+A separate page mentioned on the nav bar and a  small floating animated AI character on the home page also
+
+Style: Glowing fairy-like doctor (minimal, elegant, not childish)
+
+Position: Bottom-right or mid-right floating
+
+Idle animation: gentle floating + glow pulse
+
+the page should be designed like a llm like chat gpt use assistant-ui for that
+
+Interaction:
+
+On hover: glow intensifies
+
+On click: opens chat interface panel
+
+💬 CHAT INTERFACE (MCP CLIENT)
+
+Slides in smoothly from right
+
+Glassmorphism panel
+
+Input supports:
+
+Text
+
+Voice icon
+
+Example suggestions:
+
+“Find oxygen within 15 minutes”
+
+“Request from nearest hospital”
+
+AI responses should trigger UI changes (map highlight, panels update)
+
+✨ ANIMATIONS & EFFECTS
+
+Transitions:
+
+Smooth easing (0.6–1s cubic-bezier)
+
+Panel slide + fade + scale combo
+
+Buttons:
+
+Glow on hover
+
+Ripple effect on click
+
+Map:
+
+Pulsing nodes
+
+Animated routes (flowing light lines)
+
+⚙️ TECH STACK (IMPORTANT)
+
+Use:
+
+React + Vite
+
+TailwindCSS
+
+Framer Motion (for animations)
+
+Three.js or React Three Fiber (for background + particles)
+
+Mapbox or Leaflet (for map)
+
+reactbits
+
+assistant-ui
+
+driver.js
+
+shadcn
+
+tailrk
+
+🧩 EXTRA DETAILS (MAKE IT PREMIUM)
+
+Add subtle ambient sound toggle (optional)
+
+Add loading animation: “AI initializing…”
+
+Add top navbar:
+
+Logo (Sanjeevani glowing icon)
+
+Tabs: Dashboard, Marketplace, Analytics, AI Assistant
+
+🎨 DESIGN QUALITY BAR
+
+This must feel like:
+
+Apple-level polish
+
+Tesla UI smoothness
+
+Sci-fi movie interface (but usable)
+
+Avoid:
+
+Cartoonish elements
+
+Clutter
+
+Over-text
+
+🏁 FINAL GOAL
+
+The UI should make the user feel:
+
+“This system can actually save lives in real-time.”
+
+use a word logo of "Sanjeevani". the background animations must be some nature and ayurved related giving positive vibes.  use the colour palette #181417
+
+#484458
+
+#7a7ca8
+
+#49427d
+
+#cbb6bb.ive also attached a picture use that in the background of the landing page . make  all the other pages  loader page transitions to make it loook gorgeous. 
+
+dont add the same image every where. keep either solid colours or gradients on the other pages. use smooth and soft transitions for texts as well as pages . use a clean nav bar with liquid glass. for the mcp add a separate page which should look like chatbots and llms like chatgpt. make it responsive. and add dark and light modes also.
+
+add a home screen where we can see the background nicely the cursor animations . the name of the app would be in the center top, a good subheading , brief description of the app, an about section , the mcp client chatbot animation , make the marketplace and analytics page also work. i want the home screen look peaceful like the image ive attached clean and informative not messy .
+
+on the home page i want text fade in and fade out instead of all the texts moving up and down with scroll . for the analytics page i want you to keep the background same but add another smaller screen withing that all the elements would be displayed.
+
+Fluid multilingual hero — "Sanjeevani" in the center now uses a particle-based fluid dynamics canvas that morphs through 13 Indian languages (Hindi, Bengali, Telugu, Tamil, Kannada, Malayalam, Gujarati, Punjabi, Odia, Marathi, Urdu, Assamese) with spring physics, turbulence, and glow effects
+
+Apple fonts everywhere — All fonts replaced with SF Pro Display/Text system font stack (-apple-system, BlinkMacSystemFont) across all pages
+
+Click sounds — Added useAudioEffects hook with subtle sine-wave tones on every click.
+
+one more thing no need to do the bakend just give me a stunning frontend and a guide for how to integrate the backend with it and also for you to guide me properly ill share my project endpoints, these are the end points : POST /chat
+
+POST /dispatch
+
+POST /dispatch/preview
+
+GET  /hospitals
+
+GET  /hospitals/{id}
+
+POST /hospitals
+
+POST /inventory/upload
+
+GET  /inventory/{hospital_id}
+
+GET  /inventory/search
+
+POST /gis/best-option
+
+POST /gis/route
+
+POST /gis/route-map
+
+POST /gis/isochrone
+
+POST /gis/isochrone-map
+
+POST /events/loan-created
+
+POST /events/delivery-confirmed
+
+POST /events/loan-settled
+
+here is the plan:
+
+Sanjeevani — AI Emergency Medical Logistics UI
+
+A dark-first (with light mode), glass-and-glow web app that feels like a live AI emergency control room, softened with ayurvedic/nature calm. Frontend only, mock data, with a clearly marked API layer ready for your backend.
+
+Palette & identity
+
+Tokens from your palette, defined as semantic design tokens (oklch) in src/styles.css:
+
+#181417 ink / base background
+
+#484458 slate-violet surfaces
+
+#7a7ca8 primary accent (glow)
+
+#49427d deep violet gradients
+
+#cbb6bb warm rose foreground / soft highlights
+
+Light mode inverts to a soft parchment/rose base with the same violet accents. Dark/light toggle in the navbar, persisted.
+
+Word logo: "Sanjeevani" set in a refined display face with a subtle animated glow sweep — no icon mark, no cartoon elements.
+
+Pages
+
+Home (/) — the calm one
+
+Full-bleed nature/ayurveda background image (your upload) with a slow parallax drift and a violet gradient veil for legibility.
+
+Centered app name at the top, subheading, brief description.
+
+Text sections fade in and fade out on scroll (opacity + slight blur only — no upward slide), one idea on screen at a time.
+
+About section, then a quiet CTA into the dashboard.
+
+Cursor: soft violet particle trail + glow distortion on hover, active across the site.
+
+Dashboard (/dashboard) — the control room
+
+Solid/gradient background (no photo), three-zone layout.
+
+Left glass panel: Request Equipment — hospital select, equipment type, nearby lenders list with ETA / availability / cost, glowing "Request Now" CTA with ripple.
+
+Center: stylized satellite-look map (canvas/SVG, no API key) with pulsing hospital nodes, glowing 15-min isochrone rings, and an animated flowing route line drawn when a request fires.
+
+Right glass panel: live status (IN_TRANSIT / DELIVERED / ESCROW LOCKED), animated timeline log, QR + transaction-hash block with a blockchain feel.
+
+Marketplace (/marketplace) — browsable equipment listings from lenders: filters (equipment, distance, price), glass cards with availability state, hover glow, request action that hands off to the dashboard flow.
+
+Analytics (/analytics) — same ambient background, with an inset "screen within a screen": a bezelled glass console that contains all charts — response-time trend, fulfilment rate, equipment demand mix, hospital leaderboard — with animated draw-in.
+
+AI Assistant (/assistant) — a full ChatGPT-style page: conversation column, scripted-but-smart assistant replies, suggestion chips ("Find oxygen within 15 minutes", "Request from nearest hospital"), voice icon, streaming-style typing animation, and a floating fairy-doctor orb (idle float + glow pulse, brighter on hover) present site-wide that opens a slide-in chat panel or routes here.
+
+Motion
+
+Liquid-glass navbar: blurred, light-refracting, tabs Dashboard · Marketplace · Analytics · AI Assistant, plus theme toggle.
+
+Route transitions: an "AI initializing…" loader with a soft particle bloom between pages; fade + scale + blur, 0.6–1s cubic-bezier easing.
+
+Micro-interactions: button glow on hover, ripple on click, panel slide+fade+scale, pulsing map nodes, flowing route lines.
+
+Optional ambient sound toggle in the navbar.
+
+Backend integration note
+
+All data comes from a single mock layer at src/lib/api/ — one function per endpoint you listed (POST /chat, POST /dispatch, POST /dispatch/preview, GET /hospitals, GET /hospitals/{id}, POST /hospitals, POST /inventory/upload, GET /inventory/{hospital_id}, GET /inventory/search, POST /gis/best-option, POST /gis/route, POST /gis/route-map, POST /gis/isochrone, POST /gis/isochrone-map, POST /events/loan-created, POST /events/delivery-confirmed, POST /events/loan-settled).
+
+Each function returns mock data today and carries a header comment showing the exact fetch call to swap in, plus the expected request/response shape the UI consumes. A README in that folder explains the one-line switch (VITE_API_BASE_URL + flipping USE_MOCKS) to point everything at your server. UI components never call fetch directly, so merging is a single-folder change.
+
+Technical notes
+
+TanStack Start (React 19 + Vite) with file-based routes — this is the fixed router for the project; React Router is not used.
+
+Motion (Framer Motion) for all animation; cursor trail and background particles on canvas for performance, with prefers-reduced-motion respected.
+
+Map is hand-built canvas/SVG rather than Mapbox, so no token is needed and it matches the palette exactly; your /gis/route-map and /gis/isochrone-map responses can drive it later.
+
+Tailwind v4 tokens only, no hardcoded colors; responsive desktop-first, tablet and mobile layouts collapse the three-panel dashboard into stacked glass cards.
+
+After the build I'll run through every page in a browser — navigation, request flow, chat, filters, charts, theme toggle, and mobile widths — and fix what breaks.
+
+few more reminders:
+
+use the background image i attached for sure and only on the home page , dont use glows or glowing effects on all the pages strictly avoid that keep it simple and minimal
+
+add mcp on the nav bar also
+
+the landing page will hav a fixed background and the texts and elements fill scroll and do fade in fade out animations
+
+dont morph or add any colours over the bg image show it as it is and use the colour palette ive given only for other things
+questions you may ask:
+1. Data Layer — Should all listed backend endpoints remain MOCKED through a replaceable API layer for this build?
+
+a) Yes, use mock data and include the integration guide
+b) No, I will provide a live API base URL and response examples
+2. Attached Image — Should I use the provided tree-through-window image as the fixed home background exactly as supplied?
+
+a) Yes, use it only on the home page
+b) No, use a different image
+3. Visual Direction — Should I follow the final palette and restraint rules over the earlier glow-heavy inspiration?
+
+a) Yes, use minimal professional accents, no neon or excessive glow
+b) No, keep stronger sci-fi glow effects
+4. Landing Layout — Should the home page use a centered composition over the image?
+
+a) Yes, center the wordmark, hero text, CTA, and lower metadata like the reference
+b) Keep the current left-aligned composition
+5. Navigation — Should the landing nav become a compact centered glass bar inside the image frame?
+
+a) Yes, use a small centered nav with evenly spaced links
+b) Keep the current wide app navigation
+6. Content — Should I keep the current Sanjeevani wording and controls while changing only placement and styling?
+
+a) Yes, preserve all existing content and interactions
+b) Rewrite the landing copy too
+7. Background — Should the MCP page use its own nature/cosmic background, separate from the Home image?
+
+a) Yes, use a different ambient background only for MCP
+b) No, keep the current solid dashboard background
+8. Layout — Should the page use a centered headline, compact top navigation, large assistant input, and trust marks at the bottom?
+
+a) Yes, match this composition closely
+b) Keep the current split chat workspace
+9. Branding — Should the assistant remain branded as “Sanjeevani MCP” while using the reference’s minimal visual language?
+
+a) Yes, keep Sanjeevani MCP branding
+b) Use the reference branding instead
+
+my answers:
+<ask_human_response>Data Layer — Should all listed backend endpoints remain MOCKED through a replaceable API layer for this build?:
+**Yes, use mock data and include the integration guide**
+
+Attached Image — Should I use the provided tree-through-window image as the fixed home background exactly as supplied?:
+**Yes, use it only on the home page**
+
+Visual Direction — Should I follow the final palette and restraint rules over the earlier glow-heavy inspiration?:
+**Yes, use minimal professional accents, no neon or excessive glow**</ask_human_response>
+<ask_human_response>Landing Layout — Should the home page use a centered composition over the image?:
+**Yes, center the wordmark, hero text, CTA, and lower metadata like the reference**
+
+Navigation — Should the landing nav become a compact centered glass bar inside the image frame?:
+**Yes, use a small centered nav with evenly spaced links**
+
+Content — Should I keep the current Sanjeevani wording and controls while changing only placement and styling?:
+**Yes, preserve all existing content and interactions; make the multilingual transition made up of water droplets breaking and mearging**</ask_human_response>
+<ask_human_response>Background — Should the MCP page use its own nature/cosmic background, separate from the Home image?:
+**Yes, use a different ambient background only for MCP**
+
+Layout — Should the page use a centered headline, compact top navigation, large assistant input, and trust marks at the bottom?:
+**Yes, match this composition closely**
+
+Branding — Should the assistant remain branded as “Sanjeevani MCP” while using the reference’s minimal visual language?:
+**Yes, keep Sanjeevani MCP branding**</ask_human_response>

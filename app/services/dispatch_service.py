@@ -59,13 +59,15 @@ def dispatch_logic(request_data):
         return {"error": "Best hospital not found in DB"}
 
     # Step 3: Blockchain
-    loan = create_loan({
-        "lender": best_hospital["wallet"],  # ✅ correct
-        "equipment_id": equipment_type,
-        "quantity": quantity,
-        "duration": 4,
-        "value": 8000
-    })
+    loan = None
+    if not request_data.get("skip_blockchain", False):
+        loan = create_loan({
+            "lender": best_hospital["wallet"],
+            "equipment_id": equipment_type,
+            "quantity": quantity,
+            "duration": 4,
+            "value": 0
+        })
 
     return {
         "selected_hospital": best,

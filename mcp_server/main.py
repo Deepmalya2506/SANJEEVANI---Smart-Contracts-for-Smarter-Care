@@ -9,6 +9,7 @@ Features:
 """
 
 import json
+import re
 import requests
 from groq import Groq
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ from typing import Optional, Callable
 
 from app.core.database import hospital_collection
 from mcp_server.blockchain_tools import (
+    register_equipment_on_chain,
     create_loan_on_chain,
     confirm_delivery_on_chain,
     settle_loan_on_chain,
@@ -25,7 +27,7 @@ from mcp_server.blockchain_tools import (
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=60.0)
 
 # ─────────────────────────────────────────────
 # SESSION MEMORY  (in-memory; swap for MongoDB for prod)
@@ -47,6 +49,31 @@ def clear_session(session_id: str):
 # PENDING APPROVALS  (loan requests awaiting user confirm)
 # ─────────────────────────────────────────────
 _pending_approvals: dict[str, dict] = {}   # session_id → approval payload
+_pending_approval_collection = hospital_collection.database["pending_approvals"]
+
+
+def save_pending_approval(session_id: str, approval: dict) -> None:
+    _pending_approvals[session_id] = approval
+    _pending_approval_collection.replace_one(
+        {"session_id": session_id},
+        {"session_id": session_id, "approval": approval},
+        upsert=True,
+    )
+
+
+def take_pending_approval(session_id: str) -> dict | None:
+    approval = _pending_approvals.pop(session_id, None)
+    if approval is None:
+        stored = _pending_approval_collection.find_one_and_delete({"session_id": session_id})
+        approval = stored.get("approval") if stored else None
+    else:
+        _pending_approval_collection.delete_one({"session_id": session_id})
+    return approval
+
+
+def discard_pending_approval(session_id: str) -> None:
+    _pending_approvals.pop(session_id, None)
+    _pending_approval_collection.delete_one({"session_id": session_id})
 
 
 # ─────────────────────────────────────────────
@@ -75,7 +102,15 @@ def safe_request(method: str, url: str, **kwargs) -> dict:
         return {"error": str(e)}
     
 def get_hospital_by_id(hospital_id: str):
-    return hospital_collection.find_one({"id": hospital_id})
+    for hospital in hospital_collection.find({"id": hospital_id}):
+        wallet = hospital.get("wallet", "")
+        if isinstance(wallet, str) and len(wallet) == 42 and wallet.startswith("0x"):
+            try:
+                int(wallet[2:], 16)
+                return hospital
+            except ValueError:
+                continue
+    return None
 
 
 # ─────────────────────────────────────────────
@@ -238,7 +273,7 @@ TOOLS = [
                     "to_hospital_id":     {"type": "string"},
                     "equipment_type":     {"type": "string"},
                     "quantity":           {"type": "integer"},
-                    "duration_hours":     {"type": "integer"},
+                    "duration_hours":     {"type": "number"},
                     "distance_km":        {"type": "number"},
                     "eta_min":            {"type": "number"},
                     "route_map_url":      {"type": "string", "description": "OSM map URL if available"}
@@ -247,6 +282,22 @@ TOOLS = [
                     "from_hospital_id", "from_hospital_name",
                     "equipment_type", "quantity", "duration_hours"
                 ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "register_equipment_blockchain",
+            "description": "Register one equipment type on the smart contract. Amounts are in wei; the contract assigns the next equipment ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "hourly_rate_wei": {"anyOf": [{"type": "integer"}, {"type": "string"}]},
+                    "caution_deposit_wei": {"anyOf": [{"type": "integer"}, {"type": "string"}]}
+                },
+                "required": ["name", "hourly_rate_wei", "caution_deposit_wei"]
             }
         }
     },
@@ -360,7 +411,28 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         )
 
     if name == "get_hospitals":
-        return safe_request("GET", "http://localhost:8000/hospitals")
+        hospitals = safe_request("GET", "http://localhost:8000/hospitals")
+        if isinstance(hospitals, dict) and isinstance(hospitals.get("value"), list):
+            hospitals = hospitals["value"]
+        if not isinstance(hospitals, list):
+            return {"error": "Backend returned an invalid hospital list"}
+
+        valid_hospitals = []
+        seen_ids = set()
+        for hospital in hospitals:
+            hospital_id_value = hospital.get("id") if isinstance(hospital, dict) else None
+            location = hospital.get("location") if isinstance(hospital, dict) else None
+            if (
+                not hospital_id_value
+                or hospital_id_value in seen_ids
+                or not isinstance(location, dict)
+                or not isinstance(location.get("lat"), (int, float))
+                or not isinstance(location.get("lon"), (int, float))
+            ):
+                continue
+            seen_ids.add(hospital_id_value)
+            valid_hospitals.append(hospital)
+        return valid_hospitals
 
     if name == "get_inventory":
         return safe_request("GET", f"http://localhost:8000/inventory/{args['hospital_id']}")
@@ -372,14 +444,33 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         if "error" in hospitals:
             return hospitals
 
-        gis_input = [
-            {
-                "id": h["id"],
-                "lat": h["location"]["lat"],
-                "lon": h["location"]["lon"]
-            }
-            for h in hospitals
-        ]
+        if isinstance(hospitals, dict) and isinstance(hospitals.get("value"), list):
+            hospitals = hospitals["value"]
+        if not isinstance(hospitals, list):
+            return {"error": "Backend returned an invalid hospital list"}
+
+        gis_input = []
+        seen_ids = set()
+        for hospital in hospitals:
+            location = hospital.get("location") if isinstance(hospital, dict) else None
+            hospital_id_value = hospital.get("id") if isinstance(hospital, dict) else None
+            if (
+                not hospital_id_value
+                or hospital_id_value in seen_ids
+                or not isinstance(location, dict)
+                or not isinstance(location.get("lat"), (int, float))
+                or not isinstance(location.get("lon"), (int, float))
+            ):
+                continue
+            seen_ids.add(hospital_id_value)
+            gis_input.append({
+                "id": hospital_id_value,
+                "lat": location["lat"],
+                "lon": location["lon"],
+            })
+
+        if not gis_input:
+            return {"error": "No valid hospitals with coordinates were found"}
 
         res = safe_request(
             "POST",
@@ -428,11 +519,19 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
 
     # ── Dispatch ─────────────────────────────────────────────────────────
     if name == "dispatch":
-        return safe_request("POST", "http://localhost:8000/dispatch", json=args)
+        equipment_types = {"oxygen-cylinder": 1, "oxygen cylinder": 1, "ventilator": 2}
+        normalized_args = {
+            **args,
+            "equipment_type": equipment_types.get(
+                str(args.get("equipment_type", "")).lower(),
+                args.get("equipment_type", 1),
+            ),
+        }
+        return safe_request("POST", "http://localhost:8000/dispatch", json=normalized_args)
 
     # ── Approval gate ────────────────────────────────────────────────────
     if name == "request_user_approval":
-        _pending_approvals[session_id] = args
+        save_pending_approval(session_id, args)
 
         return {
             "approval_required": True,
@@ -441,6 +540,13 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         }
     
     # ── Blockchain ───────────────────────────────────────────────────────
+    if name == "register_equipment_blockchain":
+        return register_equipment_on_chain(
+            name=args["name"],
+            hourly_rate_wei=int(str(args["hourly_rate_wei"]), 0),
+            caution_deposit_wei=int(str(args["caution_deposit_wei"]), 0),
+        )
+
     if name == "create_blockchain_loan":
         return create_loan_on_chain(
             lender_wallet=args["lender_wallet"],
@@ -484,6 +590,7 @@ Ventilator: 2
 - dispatch                → backend inventory transfer record
 - request_user_approval   → MANDATORY before any loan/dispatch — shows user the loan summary
 - create_blockchain_loan  → locks funds in escrow on-chain (after approval only)
+- register_equipment_blockchain → registers one equipment type and returns its assigned ID
 - confirm_delivery_blockchain → marks delivery active on-chain
 - settle_loan_blockchain  → releases escrow after return
 - get_loan_status_blockchain  → check loan state
@@ -507,9 +614,11 @@ At the START of each tool call, prepend a short status line:
   ✅ Loan created! Transaction hash: 0x...
 
 ## Rules
+ Tool arguments must be valid JSON. Use literal numeric values only; never write arithmetic expressions such as `distance/60` or `34.6/1` in arguments.
 - NEVER create a loan without calling request_user_approval first
-- NEVER guess inventory or hospital data — always use tools
+- For equipment registration, call register_equipment_blockchain directly. Do not redirect to CSV inventory upload.
 - ALWAYS get route_map_url and include it in the approval proposal
+- If the user gives a location but no hospital_id, use the first registered hospital as the receiving hospital; do not ask the user for an ID.
 - After blockchain loan creation, show the tx hash and loan ID prominently
 - Keep responses concise — use markdown tables where helpful
 - If user says "yes", "approve", "confirm", "sanction" → proceed with dispatch + blockchain
@@ -530,35 +639,51 @@ def run_agent(
 
     
     # 🔥 APPROVAL HANDLING
-    if session_id in _pending_approvals:
+    pending_approval = _pending_approval_collection.find_one({"session_id": session_id})
+    if session_id in _pending_approvals or pending_approval:
+        if user_query.lower() in ["no", "cancel", "abort"]:
+            discard_pending_approval(session_id)
+            return {"reply": "Loan request cancelled."}
         if user_query.lower() in ["yes", "approve", "confirm"]:
-            approval = _pending_approvals.pop(session_id)
+            approval = take_pending_approval(session_id)
+            if approval is None:
+                return {"reply": "This approval has expired. Please submit the loan request again."}
 
             from_hospital = get_hospital_by_id(approval["from_hospital_id"])
-            to_hospital   = get_hospital_by_id(hospital_id)
+            destination_id = approval.get("to_hospital_id") or hospital_id
+            to_hospital = get_hospital_by_id(destination_id) if destination_id else None
+            if to_hospital is None:
+                hospitals = list(hospital_collection.find({}, {"_id": 0}).limit(1))
+                to_hospital = hospitals[0] if hospitals else None
 
-            loc = get_hospital_location(hospital_id)
+            if from_hospital is None or to_hospital is None:
+                return {"reply": "I could not identify the lending and receiving hospitals."}
 
-            # dispatch
+            equipment_ids = {"oxygen-cylinder": 1, "oxygen cylinder": 1, "ventilator": 2}
+            equipment_id = equipment_ids.get(str(approval.get("equipment_type", "")).lower(), 1)
+
             dispatch_result = execute_tool("dispatch", {
-                "equipment_type": approval["equipment_type"],
+                "equipment_type": equipment_id,
                 "quantity": approval["quantity"],
-                "from_hospital_id": approval["from_hospital_id"],
-                "to_hospital_id": hospital_id,
-                "location": {
-                    "lat": loc["lat"],
-                    "lon": loc["lon"]
-                }
+                "from_hospital_id": from_hospital["id"],
+                "to_hospital_id": to_hospital["id"],
+                "location": to_hospital.get("location", {"lat": 0, "lon": 0}),
+                "skip_blockchain": True,
             }, hospital_id, session_id)
 
-            # blockchain
+            if isinstance(dispatch_result, dict) and dispatch_result.get("error"):
+                return {"reply": "Dispatch failed", "error": dispatch_result["error"]}
+
             loan_result = execute_tool("create_blockchain_loan", {
                 "lender_wallet": from_hospital["wallet"],   # ✅ FIXED
-                "equipment_id": 1,
+                "equipment_id": equipment_id,
                 "quantity": approval["quantity"],
                 "duration_hours": approval["duration_hours"],
                 "borrower_wallet": to_hospital["wallet"]    # ✅ FIXED
             }, hospital_id, session_id)
+
+            if "error" in loan_result:
+                return {"reply": "Blockchain loan failed", "error": loan_result["error"]}
 
             return {
                 "reply": "✅ Loan approved and created successfully",
@@ -572,10 +697,25 @@ def run_agent(
             notify(msg)
         print(f"  📢 {msg}")
 
+    # ── Resolve a receiving hospital for location-only requests ──────────
+    if not hospital_id:
+        default_hospital = hospital_collection.find_one({}, {"_id": 0, "id": 1})
+        hospital_id = default_hospital.get("id") if default_hospital else None
+
     # ── Inject caller location once per session ─────────────────────────
     messages = get_session(session_id)[-10:]
 
     contextual_query = user_query
+    coordinate_match = re.search(
+        r"\(?\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)\s*\)?",
+        user_query,
+    )
+    if coordinate_match:
+        requested_lat, requested_lon = coordinate_match.groups()
+        contextual_query += (
+            f" [AUTHORITATIVE requested location: lat={requested_lat}, "
+            f"lon={requested_lon}; use these exact coordinates]"
+        )
     if hospital_id:
         loc = get_hospital_location(hospital_id)
         if loc and not any("Caller location" in m.get("content", "") for m in messages):
@@ -603,7 +743,7 @@ def run_agent(
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",
-            max_tokens=2048
+            max_tokens=4096
         )
 
         msg = response.choices[0].message

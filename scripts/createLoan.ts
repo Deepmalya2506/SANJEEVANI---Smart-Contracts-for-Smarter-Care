@@ -1,10 +1,11 @@
 import { ethers } from "ethers";
-import { CONTRACT_ADDRESS } from "./config.js";
+import { CONTRACT_ADDRESS } from "./config";
 import fs from "fs";
 
 async function main() {
-
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+  const provider = new ethers.providers.JsonRpcProvider(
+    "http://127.0.0.1:7545",
+  );
 
   const borrower = await provider.getSigner(0);
   const lender = await provider.getSigner(1);
@@ -13,13 +14,16 @@ async function main() {
   const lenderAddr = await lender.getAddress();
 
   const artifact = JSON.parse(
-    fs.readFileSync("./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json","utf8")
+    fs.readFileSync(
+      "./artifacts/contracts/SanjeevaniEscrow.sol/SanjeevaniEscrow.json",
+      "utf8",
+    ),
   );
 
   const contract = new ethers.Contract(
     CONTRACT_ADDRESS,
     artifact.abi,
-    borrower
+    borrower,
   );
 
   const equipmentId = 1;
@@ -39,7 +43,7 @@ async function main() {
     equipmentId,
     quantity,
     hours,
-    { value: total }
+    { value: total },
   );
 
   await tx.wait();
@@ -50,12 +54,11 @@ async function main() {
   const loan = await contract.loans(loanId);
 
   console.log("Loan ID:", loanId);
-  
+
   console.log("Loan Data:", loan);
 
-  const balance = await provider.getBalance(contract.target);
+  const balance = await provider.getBalance(contract.address);
   console.log("Escrow Balance:", balance.toString());
-
 }
 
 main();

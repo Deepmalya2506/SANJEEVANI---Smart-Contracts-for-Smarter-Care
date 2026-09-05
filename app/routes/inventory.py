@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Query
 import pandas as pd
 from app.core.database import inventory_collection
 import uuid
@@ -20,7 +20,10 @@ async def upload_inventory(file: UploadFile = File(...)):
     return {"message": "Inventory uploaded"}
 
 @router.get("/inventory/search")
-def search_inventory(equipment_type: int, quantity: int):
+def search_inventory(
+    equipment_type: int = Query(gt=0),
+    quantity: int = Query(gt=0),
+):
 
     equipment_type = int(equipment_type)  # 🔥 force int
 

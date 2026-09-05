@@ -12,10 +12,10 @@ import json
 import uuid
 from typing import Optional
 
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from mcp_server.main import run_agent, clear_session
 
@@ -41,7 +41,9 @@ def get_queue(session_id: str) -> asyncio.Queue:
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
-    query:       str
+    model_config = ConfigDict(extra="forbid")
+
+    query:       str = Field(min_length=1, max_length=4000)
     session_id:  Optional[str] = None   # If None, a new session is created
     hospital_id: Optional[str] = None
 
@@ -54,6 +56,7 @@ class ChatResponse(BaseModel):
     map_url:           Optional[str]  = None
     tx_hash:           Optional[str]  = None
     loan_id:           Optional[int]  = None
+    error:             Optional[str]  = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -69,11 +72,7 @@ def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
 
     # Notification callback — puts messages into the SSE queue
-    loop = asyncio.new_event_loop()
-
-    notifications = []
     def notify(msg: str):
-        notifications.append(msg)
         # Also push to SSE queue if a stream listener is active
         q = _notification_queues.get(session_id)
         if q:
@@ -82,12 +81,18 @@ def chat(req: ChatRequest):
             except Exception:
                 pass
 
-    result = run_agent(
+    try:
+      result = run_agent(
         user_query=req.query,
         session_id=session_id,
         hospital_id=req.hospital_id,
         notify=notify,
-    )
+      )
+    except Exception as error:
+      return ChatResponse(
+        session_id=session_id,
+        reply=f"I could not complete that request: {error}",
+      )
 
     return ChatResponse(
         session_id        = session_id,
@@ -97,6 +102,7 @@ def chat(req: ChatRequest):
         map_url           = result.get("map_url"),
         tx_hash           = result.get("tx_hash"),
         loan_id           = result.get("loan_id"),
+        error             = result.get("error"),
     )
 
 

@@ -6,3 +6,12 @@ uvicorn app.main:app --reload                      -> for backend
 npx hardhat compile                                     -> for inital smart_contract compilation and artifacts , cache creation (one-time)
 npx hardhat run scripts/deploy.ts --network localhost   -> for deployement to local ganache server at RPC:7545 
 npx hardhat node                                        -> for active blockchain server
+
+$env:PORT="5173"
+$env:BASE_PATH="/"
+$env:VITE_USE_MOCKS="false"
+$env:VITE_API_BASE_URL="http://127.0.0.1:8000"
+$env:VITE_GIS_API_BASE_URL="http://127.0.0.1:8001"
+$env:VITE_MCP_API_BASE_URL="http://127.0.0.1:9001"
+
+>> pnpm dev
