@@ -13,3 +13,4 @@ folium
 web3
 geopy
 psycopg[binary]
+UUID
