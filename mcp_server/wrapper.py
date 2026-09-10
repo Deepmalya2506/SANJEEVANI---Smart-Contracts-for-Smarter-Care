@@ -57,6 +57,7 @@ class ChatResponse(BaseModel):
     tx_hash:           Optional[str]  = None
     loan_id:           Optional[int]  = None
     error:             Optional[str]  = None
+    payment_order:     Optional[dict] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ def chat(req: ChatRequest):
         tx_hash           = result.get("tx_hash"),
         loan_id           = result.get("loan_id"),
         error             = result.get("error"),
+        payment_order     = result.get("payment_order"),
     )
 
 

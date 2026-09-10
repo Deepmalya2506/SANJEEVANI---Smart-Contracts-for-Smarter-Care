@@ -313,7 +313,6 @@ $env:VITE_USE_MOCKS="false"
 $env:VITE_API_BASE_URL="http://127.0.0.1:8000"
 $env:VITE_GIS_API_BASE_URL="http://127.0.0.1:8001"
 $env:VITE_MCP_API_BASE_URL="http://127.0.0.1:9001"
-$env:VITE_PAYMENT_AMOUNT_RUPEES="160"
 
 pnpm dev
 ```

@@ -273,6 +273,7 @@ TOOLS = [
                     "to_hospital_id":     {"type": "string"},
                     "equipment_type":     {"type": "string"},
                     "quantity":           {"type": "integer"},
+                    "amount_rupees":      {"type": "integer", "description": "Total payment amount in whole INR rupees"},
                     "duration_hours":     {"type": "number"},
                     "distance_km":        {"type": "number"},
                     "eta_min":            {"type": "number"},
@@ -280,7 +281,7 @@ TOOLS = [
                 },
                 "required": [
                     "from_hospital_id", "from_hospital_name",
-                    "equipment_type", "quantity", "duration_hours"
+                    "equipment_type", "quantity", "amount_rupees", "duration_hours"
                 ]
             }
         }
@@ -298,6 +299,23 @@ TOOLS = [
                     "caution_deposit_wei": {"anyOf": [{"type": "integer"}, {"type": "string"}]}
                 },
                 "required": ["name", "hourly_rate_wei", "caution_deposit_wei"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_payment_order",
+            "description": "Create a Razorpay Test Mode order after the user approves a loan. Amount is in whole Indian rupees.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount_rupees": {"type": "integer"},
+                    "loan_reference": {"type": "string"},
+                    "equipment_type": {"type": "string"},
+                    "quantity": {"type": "integer"}
+                },
+                "required": ["amount_rupees", "loan_reference", "equipment_type", "quantity"]
             }
         }
     },
@@ -539,7 +557,18 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
             "message": "Awaiting approval..."
         }
     
-    # ── Blockchain ───────────────────────────────────────────────────────
+    # ── Payments / Blockchain ───────────────────────────────────────────
+    if name == "create_payment_order":
+        return safe_request("POST", "http://localhost:8000/payments/orders", json={
+            "amount_rupees": int(args["amount_rupees"]),
+            "currency": "INR",
+            "loan_reference": args["loan_reference"],
+            "notes": {
+                "equipment_type": args["equipment_type"],
+                "quantity": str(args["quantity"]),
+            },
+        })
+
     if name == "register_equipment_blockchain":
         return register_equipment_on_chain(
             name=args["name"],
@@ -589,7 +618,7 @@ Ventilator: 2
 - get_isochrone           → reachable-area coverage
 - dispatch                → backend inventory transfer record
 - request_user_approval   → MANDATORY before any loan/dispatch — shows user the loan summary
-- create_blockchain_loan  → locks funds in escrow on-chain (after approval only)
+- create_payment_order    → creates the Razorpay Test Mode order after approval
 - register_equipment_blockchain → registers one equipment type and returns its assigned ID
 - confirm_delivery_blockchain → marks delivery active on-chain
 - settle_loan_blockchain  → releases escrow after return
@@ -601,7 +630,7 @@ Ventilator: 2
 3. Cross-reference: pick the nearest hospital that HAS the item
 4. get_route_map_url to get the OSM map link
 5. request_user_approval — ALWAYS call this, include map URL, distance, ETA
-6. If user approves → dispatch (backend) + create_blockchain_loan (escrow)
+6. If user approves → create a Razorpay payment order in whole INR rupees; the frontend opens Checkout.
 7. Emit stage notifications at each step (see format below)
 
 ## Stage notification format
@@ -610,16 +639,17 @@ At the START of each tool call, prepend a short status line:
   📍 Calculating nearest hospital with available stock...
   🗺️  Generating route map...
   📋 Preparing loan proposal for your approval...
-  ⛓️  Recording loan on blockchain escrow...
-  ✅ Loan created! Transaction hash: 0x...
+    💳 Creating Razorpay payment order...
+    ✅ Payment order created. Complete Razorpay Checkout to confirm the loan.
 
 ## Rules
  Tool arguments must be valid JSON. Use literal numeric values only; never write arithmetic expressions such as `distance/60` or `34.6/1` in arguments.
 - NEVER create a loan without calling request_user_approval first
+- Use `create_payment_order` after approval. Do not call `create_blockchain_loan` for the user loan workflow.
 - For equipment registration, call register_equipment_blockchain directly. Do not redirect to CSV inventory upload.
 - ALWAYS get route_map_url and include it in the approval proposal
 - If the user gives a location but no hospital_id, use the first registered hospital as the receiving hospital; do not ask the user for an ID.
-- After blockchain loan creation, show the tx hash and loan ID prominently
+- After payment order creation, show the amount and Razorpay order ID prominently
 - Keep responses concise — use markdown tables where helpful
 - If user says "yes", "approve", "confirm", "sanction" → proceed with dispatch + blockchain
 - If user says "no", "cancel", "abort" → cancel gracefully
@@ -662,33 +692,19 @@ def run_agent(
             equipment_ids = {"oxygen-cylinder": 1, "oxygen cylinder": 1, "ventilator": 2}
             equipment_id = equipment_ids.get(str(approval.get("equipment_type", "")).lower(), 1)
 
-            dispatch_result = execute_tool("dispatch", {
-                "equipment_type": equipment_id,
+            payment_result = execute_tool("create_payment_order", {
+                "amount_rupees": approval["amount_rupees"],
+                "loan_reference": f"loan-{session_id[:12]}",
+                "equipment_type": approval["equipment_type"],
                 "quantity": approval["quantity"],
-                "from_hospital_id": from_hospital["id"],
-                "to_hospital_id": to_hospital["id"],
-                "location": to_hospital.get("location", {"lat": 0, "lon": 0}),
-                "skip_blockchain": True,
             }, hospital_id, session_id)
 
-            if isinstance(dispatch_result, dict) and dispatch_result.get("error"):
-                return {"reply": "Dispatch failed", "error": dispatch_result["error"]}
-
-            loan_result = execute_tool("create_blockchain_loan", {
-                "lender_wallet": from_hospital["wallet"],   # ✅ FIXED
-                "equipment_id": equipment_id,
-                "quantity": approval["quantity"],
-                "duration_hours": approval["duration_hours"],
-                "borrower_wallet": to_hospital["wallet"]    # ✅ FIXED
-            }, hospital_id, session_id)
-
-            if "error" in loan_result:
-                return {"reply": "Blockchain loan failed", "error": loan_result["error"]}
+            if isinstance(payment_result, dict) and payment_result.get("error"):
+                return {"reply": "Razorpay order creation failed", "error": payment_result["error"]}
 
             return {
-                "reply": "✅ Loan approved and created successfully",
-                "tx_hash": loan_result.get("tx_hash"),
-                "loan_id": loan_result.get("loan_id")
+                "reply": "✅ Loan approved. Complete the Razorpay payment to continue.",
+                "payment_order": payment_result,
             }
   
 
@@ -807,6 +823,7 @@ def run_agent(
                 "get_isochrone":              "🔵 Computing reachable coverage area...",
                 "dispatch":                   "🚚 Recording dispatch in backend...",
                 "request_user_approval":      "📋 Preparing loan proposal for your review...",
+                "create_payment_order":        "💳 Creating Razorpay payment order...",
                 "create_blockchain_loan":     "⛓️  Creating loan on blockchain escrow...",
                 "confirm_delivery_blockchain":"✅ Confirming delivery on-chain...",
                 "settle_loan_blockchain":     "💰 Settling escrow and releasing funds...",

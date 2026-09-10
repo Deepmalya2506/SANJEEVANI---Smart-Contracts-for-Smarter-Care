@@ -540,10 +540,17 @@ function Dashboard({
         "Patient monitor",
         "Infusion pump",
       ].indexOf(equipmentType) + 1;
+    const paymentAmountRupees =
+      {
+        "Oxygen concentrator": 1850,
+        "Portable ventilator": 3200,
+        "Patient monitor": 940,
+        "Infusion pump": 1200,
+      }[equipmentType] ?? 160;
     setPaymentStatus("Preparing secure payment...");
     try {
       const order = await createPaymentOrder({
-        amountRupees: Number(import.meta.env.VITE_PAYMENT_AMOUNT_RUPEES ?? 160),
+        amountRupees: paymentAmountRupees,
         loanReference: `dispatch-${Date.now()}`,
         notes: { equipment_type: String(equipmentTypeId), hospital },
       });
@@ -1203,9 +1210,11 @@ function Assistant({
   dark: boolean;
   onToggle: () => void;
 }) {
+  const [, navigate] = useLocation();
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [sessionId, setSessionId] = useState<string>();
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       role: "assistant",
@@ -1213,6 +1222,61 @@ function Assistant({
       time: "09:41",
     },
   ]);
+  const startPayment = async (order: {
+    order_id: string;
+    amount_paise: number;
+    currency: string;
+    key_id: string;
+  }) => {
+    await loadRazorpayCheckout();
+    if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
+    const checkout = new window.Razorpay({
+      key: order.key_id,
+      amount: order.amount_paise,
+      currency: order.currency,
+      name: "Sanjeevani",
+      description: "Approved medical equipment loan",
+      order_id: order.order_id,
+      modal: { ondismiss: () => setTyping(false) },
+      handler: (payment) => {
+        void (async () => {
+          try {
+            await verifyPayment(payment);
+            setPaymentSuccess(true);
+            sessionStorage.setItem(
+              "sanjeevani-payment-success",
+              JSON.stringify({
+                paymentId: payment.razorpay_payment_id,
+                orderId: payment.razorpay_order_id,
+              }),
+            );
+            navigate("/payment-success");
+            setMessages((current) => [
+              ...current,
+              {
+                role: "assistant",
+                text: "✅ Payment successful. Your equipment loan is confirmed and the dispatch can proceed.",
+                time: "09:43",
+              },
+            ]);
+          } catch (error) {
+            setMessages((current) => [
+              ...current,
+              {
+                role: "assistant",
+                text:
+                  error instanceof Error
+                    ? error.message
+                    : "Payment verification failed.",
+                time: "09:43",
+              },
+            ]);
+          }
+        })();
+      },
+    });
+    checkout.open();
+  };
   const send = async (text = input) => {
     if (!text.trim() || typing) return;
     const query = text.trim();
@@ -1244,6 +1308,9 @@ function Assistant({
             time: "09:42",
           },
         ]);
+      }
+      if (response.payment_order) {
+        await startPayment(response.payment_order);
       }
     } catch {
       setMessages((current) => [
@@ -1281,6 +1348,12 @@ function Assistant({
             Tell Sanjeevani what your hospital needs. We’ll search trusted
             lenders and prepare the safest next step.
           </p>
+          {paymentSuccess && (
+            <div className="success-note page-enter">
+              <Check size={14} /> Payment successful. Loan confirmation is
+              complete.
+            </div>
+          )}
           <div className="reference-compose">
             <textarea
               value={input}
@@ -1423,8 +1496,59 @@ function RouterContent({
         path="/assistant"
         component={() => <Assistant dark={dark} onToggle={onToggle} />}
       />
+      <Route
+        path="/payment-success"
+        component={() => <PaymentSuccess dark={dark} onToggle={onToggle} />}
+      />
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function PaymentSuccess({
+  dark,
+  onToggle,
+}: {
+  dark: boolean;
+  onToggle: () => void;
+}) {
+  const payment = JSON.parse(
+    sessionStorage.getItem("sanjeevani-payment-success") ?? "{}",
+  ) as { paymentId?: string; orderId?: string };
+  return (
+    <Shell dark={dark} onToggle={onToggle}>
+      <div className="workspace">
+        <Panel className="status-panel page-enter">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">RAZORPAY / PAYMENT CONFIRMED</span>
+              <h2>Loan payment successful</h2>
+            </div>
+            <span className="status-badge">
+              <Check size={13} /> PAID
+            </span>
+          </div>
+          <div className="status-card">
+            <div className="status-icon">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <strong>Your equipment request is confirmed.</strong>
+              <span>Dispatch can now proceed through the care network.</span>
+            </div>
+          </div>
+          {payment.paymentId && <code>Payment: {payment.paymentId}</code>}
+          {payment.orderId && <code>Order: {payment.orderId}</code>}
+          <button
+            type="button"
+            className="secondary-button full"
+            onClick={() => window.history.back()}
+          >
+            Return to assistant
+          </button>
+        </Panel>
+      </div>
+    </Shell>
   );
 }
 

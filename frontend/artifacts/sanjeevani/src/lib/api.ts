@@ -144,6 +144,7 @@ export type ChatResponse = {
   approval_required?: boolean;
   tx_hash?: string;
   loan_id?: number;
+  payment_order?: RazorpayOrder;
   [key: string]: unknown;
 };
 
