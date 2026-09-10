@@ -27,7 +27,6 @@ class Settings(BaseSettings):
 
     # Supabase REST / Auth / Storage APIs
     SUPABASE_URL: str = Field(validation_alias=AliasChoices("SUPABASE_URL", "PROJECT_URL"))
-    # Mandatory: App will fail fast at startup if this key is missing
     SUPABASE_SERVICE_ROLE_KEY: str = Field(
         ...,
         validation_alias=AliasChoices(
@@ -38,6 +37,14 @@ class Settings(BaseSettings):
         ),
     )
     SUPABASE_STORAGE_BUCKET: str = Field("id-proofs", validation_alias=AliasChoices("SUPABASE_STORAGE_BUCKET"))
+
+    # Transactional Email (SMTP)
+    SMTP_HOST: str = Field("smtp.gmail.com", validation_alias=AliasChoices("SMTP_HOST"))
+    SMTP_PORT: int = Field(587, validation_alias=AliasChoices("SMTP_PORT"))
+    SMTP_USER: str | None = Field(None, validation_alias=AliasChoices("SMTP_USER", "EMAIL_USER"))
+    SMTP_PASSWORD: str | None = Field(None, validation_alias=AliasChoices("SMTP_PASSWORD", "EMAIL_PASSWORD"))
+    SMTP_FROM_EMAIL: str = Field("noreply@sanjeevani.org", validation_alias=AliasChoices("SMTP_FROM_EMAIL", "FROM_EMAIL"))
+    SMTP_FROM_NAME: str = Field("SANJEEVANI Network", validation_alias=AliasChoices("SMTP_FROM_NAME"))
 
 
 settings = Settings()
