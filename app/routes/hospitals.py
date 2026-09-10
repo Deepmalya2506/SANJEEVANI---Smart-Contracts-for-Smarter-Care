@@ -3,7 +3,7 @@ from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
 import requests
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from psycopg.errors import UniqueViolation
 from psycopg.rows import tuple_row
 from pydantic import ValidationError
@@ -20,11 +20,8 @@ from app.schemas.hospital import (
     HospitalSignupResponse,
     ProfileSetupData,
 )
+from app.services.email_services import send_transactional_notification
 from pydantic import BaseModel, EmailStr
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
 
 router = APIRouter()
 
@@ -37,6 +34,36 @@ ALLOWED_ID_PROOF_MIME_TYPES = {
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+@router.post("/api/v1/auth/login")
+def login_user(credentials: LoginRequest):
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/token?grant_type=password"
+    headers = {
+        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "email": credentials.email,
+        "password": credentials.password,
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=10)
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    data = response.json()
+    return {
+        "access_token": data["access_token"],
+        "token_type": data["token_type"],
+        "expires_in": data["expires_in"],
+    }
+
 # ============================================================================
 # STAGE 1: Facility Pre-Verification (Public)
 # ============================================================================
@@ -45,7 +72,6 @@ def verify_facility_signup(data: HFRVerificationRequest):
     with get_supabase_connection() as connection:
         connection.row_factory = tuple_row
         with connection.cursor() as cursor:
-            # Layer 1: Check seeded directory
             cursor.execute(
                 """
                 SELECT mvp_hfr_id, hospital_name
@@ -82,7 +108,6 @@ def verify_facility_signup(data: HFRVerificationRequest):
                     message="Hospital name does not match the registered ABDM facility record.",
                 )
 
-            # Layer 2: Check for existing Sanjeevani hospital registration
             cursor.execute(
                 """
                 SELECT hospital_id
@@ -162,14 +187,13 @@ def _rollback_supabase_auth_identity(auth_user_id: UUID | str) -> None:
     response_model=HospitalSignupResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def signup_hospital(data: HospitalSignupRequest):
+def signup_hospital(data: HospitalSignupRequest, background_tasks: BackgroundTasks):
     hospital_id = uuid4()
     user_id = uuid4()
 
     with get_supabase_connection() as connection:
         connection.row_factory = tuple_row
         with connection.cursor() as cursor:
-            # Re-verify Layer 1
             cursor.execute(
                 """
                 SELECT mvp_hfr_id, hospital_name
@@ -189,7 +213,6 @@ def signup_hospital(data: HospitalSignupRequest):
                     detail="HFR ID and hospital name could not be verified against the government directory.",
                 )
 
-            # Re-verify Layer 2
             cursor.execute(
                 """
                 SELECT hospital_id
@@ -205,18 +228,15 @@ def signup_hospital(data: HospitalSignupRequest):
                     detail="This hospital already has a registered organization at Sanjeevani.",
                 )
 
-    # 1. Provision Supabase Auth User (returns UUID)
     auth_user_id = _create_supabase_auth_identity(
         email=data.email,
         password=data.password,
         admin_name=data.admin_name,
     )
 
-    # 2. Persist Database Entities
     try:
         with get_supabase_connection() as connection:
             with connection.cursor() as cursor:
-                # Insert organization
                 cursor.execute(
                     """
                     INSERT INTO public.hospitals (
@@ -227,7 +247,6 @@ def signup_hospital(data: HospitalSignupRequest):
                     (hospital_id, data.mvp_hfr_id.strip(), data.hospital_name.strip()),
                 )
 
-                # Insert user mapping
                 cursor.execute(
                     """
                     INSERT INTO public.users (
@@ -238,7 +257,6 @@ def signup_hospital(data: HospitalSignupRequest):
                     (user_id, auth_user_id, hospital_id, data.admin_name.strip(), data.email),
                 )
 
-                # Append audit record
                 cursor.execute(
                     """
                     INSERT INTO public.activity_events (
@@ -266,13 +284,29 @@ def signup_hospital(data: HospitalSignupRequest):
             detail=f"Database initialization failed: {exc}",
         ) from exc
 
+    # Queue welcome email
+    welcome_html = f"""
+    <h2>Welcome to SANJEEVANI</h2>
+    <p>Dear {data.admin_name},</p>
+    <p>Your hospital organization <strong>{data.hospital_name}</strong> (HFR: {data.mvp_hfr_id}) has been registered.</p>
+    <p>Please log in and complete your profile setup (EVM wallet, UPI account, and administrator verification) to activate equipment sharing.</p>
+    """
+    background_tasks.add_task(
+        send_transactional_notification,
+        hospital_id=hospital_id,
+        recipient_email=data.email,
+        event_type="ACCOUNT_REGISTERED",
+        subject="Welcome to SANJEEVANI — Account Registered",
+        html_content=welcome_html,
+    )
+
     return HospitalSignupResponse(
         hospital_id=hospital_id,
         user_id=user_id,
         auth_user_id=auth_user_id,
         email=data.email,
         profile_status="INCOMPLETE",
-        message="Account created successfully. Authenticate and complete profile setup to activate the hospital.",
+        message="Account created successfully. Complete profile setup to activate the hospital.",
     )
 
 
@@ -320,6 +354,7 @@ def _upload_storage_document(
     response_model=CompleteProfileResponse,
 )
 def complete_hospital_profile(
+    background_tasks: BackgroundTasks,
     wallet_address: str = Form(...),
     network: str = Form(...),
     upi_id: str = Form(...),
@@ -362,7 +397,6 @@ def complete_hospital_profile(
     wallet_id = uuid4()
     payment_account_id = uuid4()
 
-    # Upload document to Supabase Storage using current_user UUIDs directly
     proof_reference = _upload_storage_document(
         file_bytes=file_bytes,
         filename=user_id_proof.filename or "identity-proof",
@@ -374,7 +408,6 @@ def complete_hospital_profile(
     with get_supabase_connection() as connection:
         with connection.cursor() as cursor:
             try:
-                # 1. Register hospital wallet
                 cursor.execute(
                     """
                     INSERT INTO public.hospital_wallets (
@@ -390,7 +423,6 @@ def complete_hospital_profile(
                     ),
                 )
 
-                # 2. Register payment account
                 cursor.execute(
                     """
                     INSERT INTO public.hospital_payment_accounts (
@@ -406,7 +438,6 @@ def complete_hospital_profile(
                     ),
                 )
 
-                # 3. Update users table with storage reference
                 cursor.execute(
                     """
                     UPDATE public.users
@@ -419,7 +450,6 @@ def complete_hospital_profile(
                     (proof_reference, current_user.user_id),
                 )
 
-                # 4. Activate hospital organization
                 cursor.execute(
                     """
                     UPDATE public.hospitals
@@ -431,7 +461,6 @@ def complete_hospital_profile(
                     (current_user.hospital_id,),
                 )
 
-                # 5. Append profile completed activity event
                 cursor.execute(
                     """
                     INSERT INTO public.activity_events (
@@ -468,6 +497,26 @@ def complete_hospital_profile(
                     detail=f"Profile completion failed: {exc}",
                 ) from exc
 
+    # Queue profile completed confirmation email
+    activation_html = f"""
+    <h2>SANJEEVANI — Hospital Profile Activated</h2>
+    <p>Dear {current_user.admin_name},</p>
+    <p>The profile for <strong>{current_user.hospital_name}</strong> is now verified and <strong>ACTIVE</strong>.</p>
+    <p>Your hospital is now eligible to list medical equipment and participate in resource sharing.</p>
+    <ul>
+        <li><strong>Registered EVM Wallet:</strong> {profile_data.wallet_address}</li>
+        <li><strong>UPI Account:</strong> {profile_data.upi_id} ({profile_data.provider})</li>
+    </ul>
+    """
+    background_tasks.add_task(
+        send_transactional_notification,
+        hospital_id=current_user.hospital_id,
+        recipient_email=current_user.user_mail,
+        event_type="PROFILE_COMPLETED",
+        subject="SANJEEVANI — Hospital Profile Activated",
+        html_content=activation_html,
+    )
+
     return CompleteProfileResponse(
         hospital_id=current_user.hospital_id,
         user_id=current_user.user_id,
@@ -475,38 +524,3 @@ def complete_hospital_profile(
         profile_status="ACTIVE",
         message="Profile setup complete. Hospital organization is now ACTIVE and eligible for equipment sharing.",
     )
-
-
-# ============================================================================
-# Session Identity Verification
-# ============================================================================
-@router.get("/api/v1/auth/me", response_model=CurrentUserContext)
-def get_authenticated_context(current_user: CurrentUserContext = Depends(get_current_user)):
-    return current_user
-
-
-@router.post("/api/v1/auth/login")
-def login_user(credentials: LoginRequest):
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/token?grant_type=password"
-    headers = {
-        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "email": credentials.email,
-        "password": credentials.password,
-    }
-
-    response = requests.post(url, headers=headers, json=payload, timeout=10)
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
-        )
-
-    data = response.json()
-    return {
-        "access_token": data["access_token"],
-        "token_type": data["token_type"],
-        "expires_in": data["expires_in"],
-    }
