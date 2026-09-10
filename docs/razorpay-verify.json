@@ -1,0 +1,5 @@
+{
+  "razorpay_order_id": "order_REPLACE_WITH_ORDER_ID",
+  "razorpay_payment_id": "pay_REPLACE_WITH_PAYMENT_ID",
+  "razorpay_signature": "REPLACE_WITH_SIGNATURE_FROM_CHECKOUT"
+}

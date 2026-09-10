@@ -1,0 +1,11 @@
+{
+  "event": "payment.captured",
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_REPLACE_WITH_PAYMENT_ID",
+        "order_id": "order_REPLACE_WITH_ORDER_ID"
+      }
+    }
+  }
+}

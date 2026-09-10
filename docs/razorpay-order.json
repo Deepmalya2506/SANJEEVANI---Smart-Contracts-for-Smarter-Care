@@ -1,0 +1,10 @@
+{
+  "amount_rupees": 160,
+  "currency": "INR",
+  "receipt": "loan-test-001",
+  "loan_reference": "loan-test-001",
+  "notes": {
+    "equipment": "ventilator",
+    "quantity": "1"
+  }
+}

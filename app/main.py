@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import hospitals, inventory, dispatch, events
+from app.routes import hospitals, inventory, dispatch, events, payments
 
 app = FastAPI()
 
@@ -16,3 +16,4 @@ app.include_router(hospitals.router)
 app.include_router(inventory.router)
 app.include_router(dispatch.router)
 app.include_router(events.router)
+app.include_router(payments.router)

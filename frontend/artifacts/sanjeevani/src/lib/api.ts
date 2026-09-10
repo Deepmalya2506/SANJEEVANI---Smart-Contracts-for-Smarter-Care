@@ -62,6 +62,41 @@ export async function createDispatch(
   return post<DispatchPreview>("/dispatch", input);
 }
 
+export type RazorpayOrder = {
+  order_id: string;
+  amount_paise: number;
+  currency: string;
+  key_id: string;
+  status: string;
+};
+
+export type RazorpayPayment = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+export async function createPaymentOrder(input: {
+  amountRupees: number;
+  currency?: string;
+  loanReference?: string;
+  notes?: Record<string, string>;
+}) {
+  return post<RazorpayOrder>("/payments/orders", {
+    amount_rupees: input.amountRupees,
+    currency: input.currency ?? "INR",
+    loan_reference: input.loanReference,
+    notes: input.notes,
+  });
+}
+
+export async function verifyPayment(input: RazorpayPayment) {
+  return post<{ status: string; payment_id: string }>(
+    "/payments/verify",
+    input,
+  );
+}
+
 export async function getHospitals() {
   return request<Array<Record<string, unknown>>>("/hospitals");
 }

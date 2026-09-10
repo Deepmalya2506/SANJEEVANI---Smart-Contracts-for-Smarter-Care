@@ -196,11 +196,40 @@ GIS_URL=http://127.0.0.1:8001
 BLOCKCHAIN_URL=http://127.0.0.1:7545
 CONTRACT_ADDRESS=<address printed by the deploy command>
 GROQ_API_KEY=<your Groq API key>
+RAZORPAY_KEY_ID=rzp_test_<your test key id>
+RAZORPAY_KEY_SECRET=<your Razorpay test key secret>
+RAZORPAY_WEBHOOK_SECRET=<your Razorpay test webhook secret>
 ```
 
 The MCP server also accepts `BLOCKCHAIN_RPC_URL`; when it is absent, it uses
 `BLOCKCHAIN_URL`. `CONTRACT_ADDRESS` must be updated whenever Ganache is reset
 and the contract is deployed again.
+
+For Razorpay Test Mode, use credentials beginning with `rzp_test_`. Keep the
+secret values in `.env` and never expose them to the frontend. The backend
+payment endpoints are:
+
+```text
+POST /payments/orders
+POST /payments/verify
+POST /payments/webhook
+```
+
+Create a test order with an amount in paise:
+
+```powershell
+$payment = @{
+	amount_rupees = 16000
+	currency = "INR"
+	loan_reference = "loan-demo-1"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+	-Uri http://127.0.0.1:8000/payments/orders `
+	-Method Post `
+	-ContentType "application/json" `
+	-Body $payment | ConvertTo-Json -Depth 10
+```
 
 ### Start MongoDB
 
@@ -284,6 +313,7 @@ $env:VITE_USE_MOCKS="false"
 $env:VITE_API_BASE_URL="http://127.0.0.1:8000"
 $env:VITE_GIS_API_BASE_URL="http://127.0.0.1:8001"
 $env:VITE_MCP_API_BASE_URL="http://127.0.0.1:9001"
+$env:VITE_PAYMENT_AMOUNT_RUPEES="160"
 
 pnpm dev
 ```

@@ -6,3 +6,4 @@ db = client[settings.DB_NAME]
 
 hospital_collection = db["hospitals"]
 inventory_collection = db["inventory"]
+payment_collection = db["payments"]

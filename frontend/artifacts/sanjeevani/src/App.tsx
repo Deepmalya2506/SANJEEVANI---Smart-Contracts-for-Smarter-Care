@@ -40,11 +40,59 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { previewDispatch, searchInventory, sendChat } from "@/lib/api";
+import {
+  createPaymentOrder,
+  previewDispatch,
+  searchInventory,
+  sendChat,
+  verifyPayment,
+} from "@/lib/api";
 import heroImage from "@assets/Untitled_design_(1)_1787314419698.png";
 import assistantImage from "@assets/download_(55)_1787315213518.jpg";
 
 const queryClient = new QueryClient();
+
+type RazorpayCheckout = {
+  open: () => void;
+};
+
+type RazorpayConstructor = new (options: {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (payment: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) => void;
+  modal: { ondismiss: () => void };
+}) => RazorpayCheckout;
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayConstructor;
+  }
+}
+
+let razorpayScriptPromise: Promise<void> | undefined;
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve();
+  if (!razorpayScriptPromise) {
+    razorpayScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve();
+      script.onerror = () =>
+        reject(new Error("Razorpay Checkout could not load"));
+      document.body.appendChild(script);
+    });
+  }
+  return razorpayScriptPromise;
+}
 
 type Lender = {
   id: number;
@@ -482,6 +530,7 @@ function Dashboard({
   const [equipmentType, setEquipmentType] = useState("Oxygen concentrator");
   const [hospital, setHospital] = useState("St. Martha Medical Centre");
   const [requested, setRequested] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState("");
   const [selected, setSelected] = useState(1);
   const requestEquipment = async () => {
     const equipmentTypeId =
@@ -491,17 +540,59 @@ function Dashboard({
         "Patient monitor",
         "Infusion pump",
       ].indexOf(equipmentType) + 1;
-    await previewDispatch({
-      equipment_type: equipmentTypeId,
-      quantity: 1,
-      location: {
-        lat: Number(import.meta.env.VITE_ORIGIN_LAT ?? 22.5726),
-        lon: Number(import.meta.env.VITE_ORIGIN_LON ?? 88.3639),
-      },
-      hospital_id: hospital,
-      skip_blockchain: true,
-    });
-    setRequested(true);
+    setPaymentStatus("Preparing secure payment...");
+    try {
+      const order = await createPaymentOrder({
+        amountRupees: Number(import.meta.env.VITE_PAYMENT_AMOUNT_RUPEES ?? 160),
+        loanReference: `dispatch-${Date.now()}`,
+        notes: { equipment_type: String(equipmentTypeId), hospital },
+      });
+      await loadRazorpayCheckout();
+      if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
+
+      const razorpay = new window.Razorpay({
+        key: order.key_id,
+        amount: order.amount_paise,
+        currency: order.currency,
+        name: "Sanjeevani",
+        description: `${equipmentType} dispatch payment`,
+        order_id: order.order_id,
+        modal: {
+          ondismiss: () => setPaymentStatus("Payment cancelled."),
+        },
+        handler: (payment) => {
+          void (async () => {
+            try {
+              await verifyPayment(payment);
+              await previewDispatch({
+                equipment_type: equipmentTypeId,
+                quantity: 1,
+                location: {
+                  lat: Number(import.meta.env.VITE_ORIGIN_LAT ?? 22.5726),
+                  lon: Number(import.meta.env.VITE_ORIGIN_LON ?? 88.3639),
+                },
+                hospital_id: hospital,
+                skip_blockchain: true,
+              });
+              setPaymentStatus("Payment verified. Dispatch preview ready.");
+              setRequested(true);
+            } catch (error) {
+              setPaymentStatus(
+                error instanceof Error
+                  ? error.message
+                  : "Payment verification failed.",
+              );
+            }
+          })();
+        },
+      });
+      setPaymentStatus("Complete the Razorpay Test Mode payment...");
+      razorpay.open();
+    } catch (error) {
+      setPaymentStatus(
+        error instanceof Error ? error.message : "Unable to start payment.",
+      );
+    }
   };
   return (
     <Shell dark={dark} onToggle={onToggle}>
@@ -617,6 +708,11 @@ function Dashboard({
               <div className="success-note page-enter">
                 <Check size={14} /> Preview locked for {hospital}. A lender will
                 confirm in under 2 minutes.
+              </div>
+            )}
+            {paymentStatus && !requested && (
+              <div className="success-note page-enter">
+                <Activity size={14} /> {paymentStatus}
               </div>
             )}
           </Panel>
