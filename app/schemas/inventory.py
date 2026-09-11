@@ -5,14 +5,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # --- Equipment Asset Models ---
 class EquipmentAssetCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
+    hospital_id: UUID | str | None = None
     equipment_type: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=200)
     serial_number: str | None = Field(default=None, max_length=100)
     condition_status: str = Field(default="OPERATIONAL", max_length=50)
     shareable: bool = True
-    hourly_rate: float = Field(ge=0.0)
+    hourly_rate: float = Field(default=0.0, ge=0.0)
     latitude: float | None = Field(default=None, ge=-90.0, le=90.0)
     longitude: float | None = Field(default=None, ge=-180.0, le=180.0)
     metadata: dict | None = None
@@ -72,8 +73,20 @@ class DispatchRequest(BaseModel):
 
 # --- Lifecycle Events ---
 class LoanLifecycleEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     loan_id: UUID
     actor_id: UUID | None = None
     note: str | None = None
+
+
+class SanctionTransactionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    borrower_hospital_id: UUID | str | None = None
+    lender_hospital_id: UUID | str
+    equipment_type: str = Field(min_length=1, max_length=100)
+    asset_id: UUID | str | None = None
+    amount_rupees: float = Field(default=1850.0, gt=0.0)
+    duration_hours: int = Field(default=24, gt=0)
+    notes: dict | str | None = None

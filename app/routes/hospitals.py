@@ -70,18 +70,19 @@ def login_user(credentials: LoginRequest):
 # ============================================================================
 @router.post("/api/v1/facilities/verify-signup", response_model=HFRVerificationResponse)
 def verify_facility_signup(data: HFRVerificationRequest):
-    with get_supabase_connection() as connection:
-        connection.row_factory = tuple_row
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT mvp_hfr_id, hospital_name
-                FROM public.abdm_mock_hfr
-                WHERE mvp_hfr_id = %s
-                """,
-                (data.mvp_hfr_id.strip(),),
-            )
-            record = cursor.fetchone()
+    try:
+        with get_supabase_connection() as connection:
+            connection.row_factory = tuple_row
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT mvp_hfr_id, hospital_name
+                    FROM public.abdm_mock_hfr
+                    WHERE mvp_hfr_id = %s
+                    """,
+                    (data.mvp_hfr_id.strip(),),
+                )
+                record = cursor.fetchone()
 
                 if record is None:
                     return HFRVerificationResponse(
@@ -109,36 +110,36 @@ def verify_facility_signup(data: HFRVerificationRequest):
                         message="Hospital name does not match the registered ABDM facility record.",
                     )
 
-            cursor.execute(
-                """
-                SELECT hospital_id
-                FROM public.hospitals
-                WHERE mvp_hfr_id = %s
-                LIMIT 1
-                """,
-                (data.mvp_hfr_id.strip(),),
-            )
-            if cursor.fetchone() is not None:
-                return HFRVerificationResponse(
-                    verified=True,
-                    directory_match=True,
-                    registration_allowed=False,
-                    mvp_hfr_id=mvp_hfr_id,
-                    hospital_name=official_hospital_name,
-                    message=(
-                        f"Hospital '{official_hospital_name}' already has an account at Sanjeevani. "
-                        "Please contact your hospital administrator."
-                    ),
+                cursor.execute(
+                    """
+                    SELECT hospital_id
+                    FROM public.hospitals
+                    WHERE mvp_hfr_id = %s
+                    LIMIT 1
+                    """,
+                    (data.mvp_hfr_id.strip(),),
                 )
+                if cursor.fetchone() is not None:
+                    return HFRVerificationResponse(
+                        verified=True,
+                        directory_match=True,
+                        registration_allowed=False,
+                        mvp_hfr_id=mvp_hfr_id,
+                        hospital_name=official_hospital_name,
+                        message=(
+                            f"Hospital '{official_hospital_name}' already has an account at Sanjeevani. "
+                            "Please contact your hospital administrator."
+                        ),
+                    )
 
-        return HFRVerificationResponse(
-            verified=True,
-            directory_match=True,
-            registration_allowed=True,
-            mvp_hfr_id=mvp_hfr_id,
-            hospital_name=official_hospital_name,
-            message="Facility verified. Continue to account registration.",
-        )
+            return HFRVerificationResponse(
+                verified=True,
+                directory_match=True,
+                registration_allowed=True,
+                mvp_hfr_id=mvp_hfr_id,
+                hospital_name=official_hospital_name,
+                message="Facility verified. Continue to account registration.",
+            )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -181,6 +182,117 @@ def search_facilities(
                         (min(max(1, limit), 100),),
                     )
                 return cursor.fetchall()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+        ) from exc
+
+
+# ============================================================================
+# Nearby Facility & Hospital Directory (ABDM Mock Geo-Search)
+# ============================================================================
+@router.get("/api/v1/facilities/nearby")
+@router.get("/hospitals/nearby")
+def list_nearby_hospitals(
+    lat: float | None = None,
+    latitude: float | None = None,
+    lon: float | None = None,
+    longitude: float | None = None,
+    lng: float | None = None,
+    radius_km: float = 100.0,
+    limit: int = 20,
+    equipment_type: str | None = None,
+):
+    """
+    Lists nearby hospitals from public.abdm_mock_hfr in Supabase based on latitude and longitude coordinates.
+    Computes exact geographic distance (in km) and merges registered status and available equipment.
+    """
+    resolved_lat = latitude if latitude is not None else lat
+    resolved_lon = longitude if longitude is not None else (lng if lng is not None else lon)
+
+    if resolved_lat is None or resolved_lon is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both latitude (lat) and longitude (lon/lng) parameters are required.",
+        )
+
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                # Spherical Haversine calculation directly in PostgreSQL
+                query = """
+                SELECT 
+                    m.mvp_hfr_id,
+                    m.hospital_name,
+                    m.address,
+                    m.latitude::float8 AS latitude,
+                    m.longitude::float8 AS longitude,
+                    h.hospital_id::text AS hospital_id,
+                    COALESCE(h.profile_status, 'UNREGISTERED') AS profile_status,
+                    COALESCE(h.verification_status, 'PENDING') AS verification_status,
+                    hw.address AS wallet_address,
+                    (
+                        6371.0 * acos(
+                            least(1.0, greatest(-1.0, 
+                                cos(radians(%s)) * cos(radians(m.latitude::float8)) * 
+                                cos(radians(m.longitude::float8) - radians(%s)) + 
+                                sin(radians(%s)) * sin(radians(m.latitude::float8))
+                            ))
+                        )
+                    )::float8 AS distance_km
+                FROM public.abdm_mock_hfr m
+                LEFT JOIN public.hospitals h ON m.mvp_hfr_id = h.mvp_hfr_id
+                LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                WHERE m.latitude IS NOT NULL AND m.longitude IS NOT NULL
+                  AND (
+                        6371.0 * acos(
+                            least(1.0, greatest(-1.0, 
+                                cos(radians(%s)) * cos(radians(m.latitude::float8)) * 
+                                cos(radians(m.longitude::float8) - radians(%s)) + 
+                                sin(radians(%s)) * sin(radians(m.latitude::float8))
+                            ))
+                        )
+                  ) <= %s
+                ORDER BY distance_km ASC
+                LIMIT %s
+                """
+                cursor.execute(
+                    query,
+                    (
+                        resolved_lat,
+                        resolved_lon,
+                        resolved_lat,
+                        resolved_lat,
+                        resolved_lon,
+                        resolved_lat,
+                        float(radius_km),
+                        min(max(1, limit), 100),
+                    ),
+                )
+                hospitals = cursor.fetchall()
+
+                # If equipment_type filter is specified, query active equipment inventory
+                if equipment_type and hospitals:
+                    hospital_ids = [h["hospital_id"] for h in hospitals if h.get("hospital_id")]
+                    if hospital_ids:
+                        cursor.execute(
+                            """
+                            SELECT hospital_id::text, COUNT(asset_id)::int AS count
+                            FROM public.equipment_assets
+                            WHERE hospital_id::text = ANY(%s)
+                              AND LOWER(equipment_type) = LOWER(%s)
+                              AND availability_status = 'AVAILABLE'
+                              AND shareable = true
+                            GROUP BY hospital_id
+                            """,
+                            (hospital_ids, equipment_type.strip()),
+                        )
+                        eq_map = {row["hospital_id"]: row["count"] for row in cursor.fetchall()}
+                        for h in hospitals:
+                            h["available_equipment_count"] = eq_map.get(h.get("hospital_id"), 0)
+
+                return hospitals
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

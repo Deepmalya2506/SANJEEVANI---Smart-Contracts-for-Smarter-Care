@@ -163,6 +163,61 @@ def verify_payment(data: dict[str, Any]) -> dict[str, Any]:
                             }),
                         ),
                     )
+
+                    # Update associated loan to ACTIVE if loan_reference exists
+                    loan_ref = updated_record.get("loan_reference")
+                    if loan_ref:
+                        cursor.execute(
+                            """
+                            UPDATE public.loans
+                            SET loan_status = 'ACTIVE', updated_at = now()
+                            WHERE loan_id::text = %s OR ('loan-' || SUBSTRING(loan_id::text, 1, 12)) = %s
+                            RETURNING loan_id, asset_id, borrower_hospital_id, lender_hospital_id
+                            """,
+                            (loan_ref, loan_ref),
+                        )
+                        loan_row = cursor.fetchone()
+                        if loan_row:
+                            # Update equipment asset to ON_LOAN
+                            cursor.execute(
+                                """
+                                UPDATE public.equipment_assets
+                                SET availability_status = 'ON_LOAN', updated_at = now()
+                                WHERE asset_id = %s
+                                """,
+                                (loan_row["asset_id"],),
+                            )
+
+                            # Query borrower email
+                            cursor.execute(
+                                """
+                                SELECT u.user_mail, u.admin_name, h.hospital_name
+                                FROM public.users u
+                                JOIN public.hospitals h ON u.hospital_id = h.hospital_id
+                                WHERE u.hospital_id = %s
+                                LIMIT 1
+                                """,
+                                (loan_row["borrower_hospital_id"],),
+                            )
+                            user_contact = cursor.fetchone()
+                            if user_contact and user_contact.get("user_mail"):
+                                try:
+                                    from app.services.email_services import send_transactional_notification
+                                    send_transactional_notification(
+                                        hospital_id=loan_row["borrower_hospital_id"],
+                                        recipient_email=user_contact["user_mail"],
+                                        event_type="PAYMENT_CONFIRMED",
+                                        subject="SANJEEVANI — Payment Confirmed & Loan Active",
+                                        html_content=f"""
+                                        <h2>SANJEEVANI — Payment Confirmed</h2>
+                                        <p>Dear {user_contact.get('admin_name', 'Administrator')},</p>
+                                        <p>Payment of ₹{float(updated_record['amount_rupees']):,.2f} for loan <strong>{loan_ref}</strong> has been authorized.</p>
+                                        <p>Status is now <strong>ACTIVE</strong> and equipment dispatch is authorized.</p>
+                                        """,
+                                        loan_id=loan_row["loan_id"],
+                                    )
+                                except Exception as e_err:
+                                    print(f"[WARN] Failed to trigger payment confirmed email: {e_err}")
             connection.commit()
     except Exception as exc:
         print(f"[WARN] Supabase payment authorization update failed: {exc}")
