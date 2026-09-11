@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-pymongo
 python-dotenv
 pydantic
 requests
@@ -11,3 +10,6 @@ fastmcp
 groq
 folium
 razorpay
+web3
+geopy
+psycopg[binary]

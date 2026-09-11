@@ -1,0 +1,37 @@
+State,hospital_count,mapped_count,total_beds,districts,mapped_percent
+Maharashtra,4807,2974,5573,35,61.9
+Gujarat,3807,1558,3445,26,40.9
+Uttar Pradesh,3158,0,0,71,0.0
+Tamil Nadu,2399,0,0,31,0.0
+Karnataka,2226,1312,303,30,58.9
+Haryana,1669,899,0,21,53.9
+Andhra Pradesh,1380,954,0,14,69.1
+Rajasthan,1209,0,0,32,0.0
+Punjab,1201,0,0,20,0.0
+Telangana,1175,0,0,10,0.0
+West Bengal,1164,0,0,20,0.0
+Bihar,1039,563,0,39,54.2
+Madhya Pradesh,899,668,0,47,74.3
+Kerala,890,663,0,15,74.5
+Odisha,718,0,0,29,0.0
+Himachal Pradesh,485,346,0,12,71.3
+Jharkhand,478,264,0,25,55.2
+Chhattisgarh,445,217,0,19,48.8
+Uttarakhand,390,0,0,13,0.0
+Assam,183,99,0,22,54.1
+Jammu and Kashmir,96,58,0,9,60.4
+Mizoram,86,0,0,8,0.0
+Goa,84,43,0,2,51.2
+Meghalaya,62,0,0,6,0.0
+Chandigarh,60,35,0,1,58.3
+Puducherry,47,0,0,2,0.0
+Tripura,41,0,0,4,0.0
+Manipur,19,0,0,4,0.0
+Dadra and Nagar Haveli,18,2,0,1,11.1
+Nagaland,14,0,0,6,0.0
+Arunachal Pradesh,10,8,0,5,80.0
+Andaman and Nicobar Islands,5,5,0,1,100.0
+Daman and Diu,5,4,0,1,80.0
+Sikkim,2,0,0,1,0.0
+Lakshadweep,1,0,0,1,0.0
+North Twenty Four Parganas,1,0,0,1,0.0

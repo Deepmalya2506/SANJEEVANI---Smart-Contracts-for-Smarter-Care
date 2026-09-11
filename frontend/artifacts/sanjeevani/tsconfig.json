@@ -14,9 +14,11 @@
       "@/*": ["./src/*"]
     }
   },
-  "references": [
-    {
-      "path": "../../lib/api-client-react"
-    }
-  ]
+  // The app uses src/lib/api.ts directly; retain the generated client for
+  // other artifacts without including it in this app's typecheck.
+  // "references": [
+  //   {
+  //     "path": "../../lib/api-client-react"
+  //   }
+  // ]
 }

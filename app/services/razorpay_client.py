@@ -1,59 +1,113 @@
 import hashlib
 import hmac
-import uuid
+import json
+from uuid import UUID, uuid4
+from typing import Any
 
+# pyrefly: ignore [missing-import]
 import razorpay
-from fastapi import HTTPException
+from fastapi import HTTPException, status
+# pyrefly: ignore [missing-import]
+from psycopg.rows import dict_row
 
 from app.core.config import settings
-from app.core.database import payment_collection
+from app.core.database import get_supabase_connection, ensure_payments_table_exists
 
 
-def _client():
+def _client() -> razorpay.Client:
     if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
         raise HTTPException(
-            status_code=503,
-            detail="Razorpay test credentials are not configured",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay test credentials are not configured.",
         )
     return razorpay.Client(
         auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
     )
 
 
-def create_order(data: dict) -> dict:
+def create_order(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Creates a Razorpay order with the proper transaction value in paise.
+    Persists the transaction state in Supabase PostgreSQL (public.payments).
+    """
     client = _client()
-    receipt = data.get("receipt") or f"loan_{uuid.uuid4().hex[:24]}"
-    amount_paise = data["amount_rupees"] * 100
-    try:
-        order = client.order.create(
-            {
-                "amount": amount_paise,
-                "currency": data["currency"],
-                "receipt": receipt,
-                "notes": data.get("notes", {}),
-            }
+    receipt = data.get("receipt") or f"loan_{uuid4().hex[:24]}"
+    
+    # Calculate exact transaction value in paise (handling both int and float rupees)
+    amount_rupees = float(data["amount_rupees"])
+    amount_paise = int(round(amount_rupees * 100))
+
+    if amount_paise <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Transaction amount must be greater than zero.",
         )
+
+    currency = data.get("currency", "INR").upper()
+    notes = data.get("notes", {})
+    loan_reference = data.get("loan_reference")
+
+    try:
+        order = client.order.create({
+            "amount": amount_paise,
+            "currency": currency,
+            "receipt": receipt,
+            "notes": {str(k): str(v) for k, v in notes.items()} if isinstance(notes, dict) else {},
+        })
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Razorpay order creation failed: {error}") from error
-    payment_collection.insert_one({
-        "order_id": order["id"],
-        "loan_reference": data.get("loan_reference"),
-        "amount_paise": order["amount"],
-        "amount_rupees": order["amount"] // 100,
-        "currency": order["currency"],
-        "status": "PAYMENT_PENDING",
-        "receipt": receipt,
-    })
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Razorpay order creation failed: {error}",
+        ) from error
+
+    payment_id = uuid4()
+
+    # Persist in Supabase PostgreSQL
+    try:
+        ensure_payments_table_exists()
+        with get_supabase_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO public.payments (
+                        payment_id, order_id, payment_provider_id, loan_reference,
+                        amount_paise, amount_rupees, currency, status,
+                        receipt, notes, created_at, updated_at
+                    )
+                    VALUES (%s, %s, NULL, %s, %s, %s, %s, 'PAYMENT_PENDING', %s, %s, now(), now())
+                    """,
+                    (
+                        payment_id,
+                        order["id"],
+                        loan_reference,
+                        amount_paise,
+                        amount_rupees,
+                        currency,
+                        receipt,
+                        json.dumps(notes) if notes else None,
+                    ),
+                )
+            connection.commit()
+    except Exception as exc:
+        print(f"[WARN] Supabase payment logging failed: {exc}")
+
     return {
+        "payment_id": str(payment_id),
         "order_id": order["id"],
         "amount_paise": order["amount"],
+        "amount_rupees": amount_rupees,
         "currency": order["currency"],
         "key_id": settings.RAZORPAY_KEY_ID,
         "status": "PAYMENT_PENDING",
+        "receipt": receipt,
     }
 
 
-def verify_payment(data: dict) -> dict:
+def verify_payment(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Verifies the cryptographic payment signature from Razorpay checkout.
+    Updates payment record in Supabase PostgreSQL to PAYMENT_AUTHORIZED.
+    """
     client = _client()
     try:
         client.utility.verify_payment_signature({
@@ -62,41 +116,145 @@ def verify_payment(data: dict) -> dict:
             "razorpay_signature": data["razorpay_signature"],
         })
     except Exception as error:
-        raise HTTPException(status_code=400, detail=f"Razorpay payment verification failed: {error}") from error
-    payment_collection.update_one(
-        {"order_id": data["razorpay_order_id"]},
-        {"$set": {
-            "payment_id": data["razorpay_payment_id"],
-            "status": "PAYMENT_AUTHORIZED",
-        }},
-    )
-    return {"status": "PAYMENT_AUTHORIZED", "payment_id": data["razorpay_payment_id"]}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Razorpay payment signature verification failed: {error}",
+        ) from error
+
+    # Update payment state in Supabase PostgreSQL
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    UPDATE public.payments
+                    SET 
+                        payment_provider_id = %s,
+                        signature = %s,
+                        status = 'PAYMENT_AUTHORIZED',
+                        updated_at = now()
+                    WHERE order_id = %s
+                    RETURNING payment_id, loan_reference, amount_rupees
+                    """,
+                    (
+                        data["razorpay_payment_id"],
+                        data["razorpay_signature"],
+                        data["razorpay_order_id"],
+                    ),
+                )
+                updated_record = cursor.fetchone()
+
+                # Audit activity event
+                if updated_record:
+                    cursor.execute(
+                        """
+                        INSERT INTO public.activity_events (
+                            activity_id, hospital_id, user_id, entity_type, entity_id, event_type, metadata
+                        )
+                        VALUES (%s, NULL, NULL, 'PAYMENT', %s, 'payment.authorized', %s)
+                        """,
+                        (
+                            uuid4(),
+                            updated_record["payment_id"],
+                            json.dumps({
+                                "order_id": data["razorpay_order_id"],
+                                "payment_id": data["razorpay_payment_id"],
+                                "amount_rupees": float(updated_record["amount_rupees"]) if updated_record["amount_rupees"] else None,
+                            }),
+                        ),
+                    )
+            connection.commit()
+    except Exception as exc:
+        print(f"[WARN] Supabase payment authorization update failed: {exc}")
+
+    return {
+        "status": "PAYMENT_AUTHORIZED",
+        "payment_id": data["razorpay_payment_id"],
+        "order_id": data["razorpay_order_id"],
+    }
 
 
 def verify_webhook(body: bytes, signature: str) -> bool:
     secret = settings.RAZORPAY_WEBHOOK_SECRET
     if not secret:
-        raise HTTPException(status_code=503, detail="Razorpay webhook secret is not configured")
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay webhook secret is not configured.",
+        )
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
 
-def apply_webhook(event: dict) -> dict:
+def apply_webhook(event: dict[str, Any]) -> dict[str, Any]:
+    """
+    Applies an incoming Razorpay webhook event and synchronizes status in Supabase.
+    """
     payload = event.get("payload", {})
     payment = payload.get("payment", {}).get("entity", {})
     order_id = payment.get("order_id")
+
     if not order_id:
-        return {"status": "ignored"}
-    event_name = event.get("event")
-    status = {
+        return {"status": "ignored", "reason": "No order_id in webhook payload"}
+
+    event_name = event.get("event", "")
+    new_status = {
         "payment.captured": "PAYMENT_CAPTURED",
         "order.paid": "PAYMENT_CAPTURED",
         "payment.failed": "PAYMENT_FAILED",
         "refund.processed": "REFUNDED",
     }.get(event_name)
-    if status:
-        payment_collection.update_one(
-            {"order_id": order_id},
-            {"$set": {"status": status, "payment_id": payment.get("id")}},
-        )
-    return {"status": status or "ignored"}
+
+    if new_status:
+        try:
+            with get_supabase_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        UPDATE public.payments
+                        SET 
+                            status = %s,
+                            payment_provider_id = COALESCE(%s, payment_provider_id),
+                            updated_at = now()
+                        WHERE order_id = %s
+                        """,
+                        (new_status, payment.get("id"), order_id),
+                    )
+                connection.commit()
+        except Exception as exc:
+            print(f"[WARN] Supabase webhook synchronization failed: {exc}")
+
+    return {"status": new_status or "ignored", "order_id": order_id}
+
+
+def get_payment(identifier: str) -> dict[str, Any] | None:
+    """Retrieves payment details by order_id or payment_id from Supabase."""
+    with get_supabase_connection() as connection:
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT 
+                    payment_id, order_id, payment_provider_id, loan_reference,
+                    amount_paise, amount_rupees, currency, status,
+                    receipt, created_at, updated_at
+                FROM public.payments
+                WHERE order_id = %s OR payment_id::text = %s
+                LIMIT 1
+                """,
+                (identifier, identifier),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "payment_id": str(row["payment_id"]),
+                    "order_id": row["order_id"],
+                    "payment_provider_id": row["payment_provider_id"],
+                    "loan_reference": row["loan_reference"],
+                    "amount_paise": row["amount_paise"],
+                    "amount_rupees": float(row["amount_rupees"]) if row["amount_rupees"] is not None else None,
+                    "currency": row["currency"],
+                    "status": row["status"],
+                    "receipt": row["receipt"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+                }
+            return None

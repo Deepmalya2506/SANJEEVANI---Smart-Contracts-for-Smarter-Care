@@ -26,3 +26,10 @@ venv/
 # .env var
 .env
 .txt
+
+# db
+/supabase
+
+.agents
+
+.vscode

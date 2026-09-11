@@ -11,12 +11,15 @@ Features:
 import json
 import re
 import requests
+# pyrefly: ignore [missing-import]
 from groq import Groq
 from dotenv import load_dotenv
 import os
 from typing import Optional, Callable
 
-from app.core.database import hospital_collection
+from app.core.database import get_supabase_connection
+# pyrefly: ignore [missing-import]
+from psycopg.rows import dict_row
 from mcp_server.blockchain_tools import (
     register_equipment_on_chain,
     create_loan_on_chain,
@@ -30,7 +33,7 @@ load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=60.0)
 
 # ─────────────────────────────────────────────
-# SESSION MEMORY  (in-memory; swap for MongoDB for prod)
+# SESSION MEMORY  (in-memory conversation store)
 # ─────────────────────────────────────────────
 _sessions: dict[str, list[dict]] = {}
 
@@ -49,31 +52,18 @@ def clear_session(session_id: str):
 # PENDING APPROVALS  (loan requests awaiting user confirm)
 # ─────────────────────────────────────────────
 _pending_approvals: dict[str, dict] = {}   # session_id → approval payload
-_pending_approval_collection = hospital_collection.database["pending_approvals"]
 
 
 def save_pending_approval(session_id: str, approval: dict) -> None:
     _pending_approvals[session_id] = approval
-    _pending_approval_collection.replace_one(
-        {"session_id": session_id},
-        {"session_id": session_id, "approval": approval},
-        upsert=True,
-    )
 
 
 def take_pending_approval(session_id: str) -> dict | None:
-    approval = _pending_approvals.pop(session_id, None)
-    if approval is None:
-        stored = _pending_approval_collection.find_one_and_delete({"session_id": session_id})
-        approval = stored.get("approval") if stored else None
-    else:
-        _pending_approval_collection.delete_one({"session_id": session_id})
-    return approval
+    return _pending_approvals.pop(session_id, None)
 
 
 def discard_pending_approval(session_id: str) -> None:
     _pending_approvals.pop(session_id, None)
-    _pending_approval_collection.delete_one({"session_id": session_id})
 
 
 # ─────────────────────────────────────────────
@@ -81,8 +71,28 @@ def discard_pending_approval(session_id: str) -> None:
 # ─────────────────────────────────────────────
 
 def get_hospital_location(hospital_id: str) -> Optional[dict]:
-    hospital = hospital_collection.find_one({"id": hospital_id})
-    return hospital["location"] if hospital else None
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT 
+                        COALESCE(ST_Y(ea.location), mock.latitude) AS lat,
+                        COALESCE(ST_X(ea.location), mock.longitude) AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    LEFT JOIN public.equipment_assets ea ON h.hospital_id = ea.hospital_id
+                    WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
+                    LIMIT 1
+                    """,
+                    (hospital_id, hospital_id),
+                )
+                row = cursor.fetchone()
+                if row and row["lat"] is not None and row["lon"] is not None:
+                    return {"lat": float(row["lat"]), "lon": float(row["lon"])}
+    except Exception as exc:
+        print(f"[WARN] Failed to fetch hospital location from Supabase: {exc}")
+    return None
 
 def safe_request(method: str, url: str, **kwargs) -> dict:
     try:
@@ -102,15 +112,40 @@ def safe_request(method: str, url: str, **kwargs) -> dict:
         return {"error": str(e)}
     
 def get_hospital_by_id(hospital_id: str):
-    for hospital in hospital_collection.find({"id": hospital_id}):
-        wallet = hospital.get("wallet", "")
-        if isinstance(wallet, str) and len(wallet) == 42 and wallet.startswith("0x"):
-            try:
-                int(wallet[2:], 16)
-                return hospital
-            except ValueError:
-                continue
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT 
+                        h.hospital_id::text AS id,
+                        h.hospital_name AS name,
+                        hw.address AS wallet,
+                        mock.latitude AS lat,
+                        mock.longitude AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
+                    LIMIT 1
+                    """,
+                    (hospital_id, hospital_id),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "id": row["id"],
+                        "name": row["name"],
+                        "wallet": row.get("wallet") or "",
+                        "location": {
+                            "lat": float(row["lat"]) if row["lat"] is not None else 22.5726,
+                            "lon": float(row["lon"]) if row["lon"] is not None else 88.3639,
+                        },
+                    }
+    except Exception as exc:
+        print(f"[WARN] Failed to fetch hospital by ID from Supabase: {exc}")
     return None
+
 
 
 # ─────────────────────────────────────────────
@@ -669,8 +704,7 @@ def run_agent(
 
     
     # 🔥 APPROVAL HANDLING
-    pending_approval = _pending_approval_collection.find_one({"session_id": session_id})
-    if session_id in _pending_approvals or pending_approval:
+    if session_id in _pending_approvals:
         if user_query.lower() in ["no", "cancel", "abort"]:
             discard_pending_approval(session_id)
             return {"reply": "Loan request cancelled."}
@@ -683,8 +717,23 @@ def run_agent(
             destination_id = approval.get("to_hospital_id") or hospital_id
             to_hospital = get_hospital_by_id(destination_id) if destination_id else None
             if to_hospital is None:
-                hospitals = list(hospital_collection.find({}, {"_id": 0}).limit(1))
-                to_hospital = hospitals[0] if hospitals else None
+                try:
+                    with get_supabase_connection() as connection:
+                        with connection.cursor(row_factory=dict_row) as cursor:
+                            cursor.execute(
+                                """
+                                SELECT h.hospital_id::text AS id, h.hospital_name AS name, hw.address AS wallet
+                                FROM public.hospitals h
+                                LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                                WHERE h.profile_status = 'ACTIVE'
+                                LIMIT 1
+                                """
+                            )
+                            row = cursor.fetchone()
+                            if row:
+                                to_hospital = {"id": row["id"], "wallet": row.get("wallet") or "", "name": row["name"]}
+                except Exception:
+                    to_hospital = None
 
             if from_hospital is None or to_hospital is None:
                 return {"reply": "I could not identify the lending and receiving hospitals."}
@@ -715,8 +764,17 @@ def run_agent(
 
     # ── Resolve a receiving hospital for location-only requests ──────────
     if not hospital_id:
-        default_hospital = hospital_collection.find_one({}, {"_id": 0, "id": 1})
-        hospital_id = default_hospital.get("id") if default_hospital else None
+        try:
+            with get_supabase_connection() as connection:
+                with connection.cursor(row_factory=dict_row) as cursor:
+                    cursor.execute(
+                        "SELECT hospital_id::text AS id FROM public.hospitals WHERE profile_status = 'ACTIVE' LIMIT 1"
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        hospital_id = row["id"]
+        except Exception:
+            hospital_id = None
 
     # ── Inject caller location once per session ─────────────────────────
     messages = get_session(session_id)[-10:]
