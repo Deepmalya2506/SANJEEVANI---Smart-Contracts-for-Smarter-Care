@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 import os
 from typing import Optional, Callable
 
-from app.core.database import hospital_collection
+from app.core.database import get_supabase_connection
+from psycopg.rows import dict_row
 from mcp_server.blockchain_tools import (
     register_equipment_on_chain,
     create_loan_on_chain,
@@ -26,6 +27,9 @@ from mcp_server.blockchain_tools import (
 )
 
 load_dotenv()
+
+BACKEND_URL = os.getenv("MCP_BACKEND_URL", "http://localhost:8000").rstrip("/")
+GIS_URL = os.getenv("MCP_GIS_URL", "http://localhost:8001").rstrip("/")
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=60.0)
 
@@ -49,31 +53,15 @@ def clear_session(session_id: str):
 # PENDING APPROVALS  (loan requests awaiting user confirm)
 # ─────────────────────────────────────────────
 _pending_approvals: dict[str, dict] = {}   # session_id → approval payload
-_pending_approval_collection = hospital_collection.database["pending_approvals"]
-
 
 def save_pending_approval(session_id: str, approval: dict) -> None:
     _pending_approvals[session_id] = approval
-    _pending_approval_collection.replace_one(
-        {"session_id": session_id},
-        {"session_id": session_id, "approval": approval},
-        upsert=True,
-    )
-
 
 def take_pending_approval(session_id: str) -> dict | None:
-    approval = _pending_approvals.pop(session_id, None)
-    if approval is None:
-        stored = _pending_approval_collection.find_one_and_delete({"session_id": session_id})
-        approval = stored.get("approval") if stored else None
-    else:
-        _pending_approval_collection.delete_one({"session_id": session_id})
-    return approval
-
+    return _pending_approvals.pop(session_id, None)
 
 def discard_pending_approval(session_id: str) -> None:
     _pending_approvals.pop(session_id, None)
-    _pending_approval_collection.delete_one({"session_id": session_id})
 
 
 # ─────────────────────────────────────────────
@@ -81,8 +69,28 @@ def discard_pending_approval(session_id: str) -> None:
 # ─────────────────────────────────────────────
 
 def get_hospital_location(hospital_id: str) -> Optional[dict]:
-    hospital = hospital_collection.find_one({"id": hospital_id})
-    return hospital["location"] if hospital else None
+    try:
+        with get_supabase_connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT 
+                        COALESCE(AVG(ST_Y(ea.location)), AVG(mock.latitude))::float8 AS lat,
+                        COALESCE(AVG(ST_X(ea.location)), AVG(mock.longitude))::float8 AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    LEFT JOIN public.equipment_assets ea ON h.hospital_id = ea.hospital_id
+                    WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
+                    GROUP BY h.hospital_id
+                    """,
+                    (str(hospital_id), str(hospital_id)),
+                )
+                row = cur.fetchone()
+                if row and row["lat"] is not None and row["lon"] is not None:
+                    return {"lat": float(row["lat"]), "lon": float(row["lon"])}
+    except Exception:
+        pass
+    return None
 
 def safe_request(method: str, url: str, **kwargs) -> dict:
     try:
@@ -102,14 +110,36 @@ def safe_request(method: str, url: str, **kwargs) -> dict:
         return {"error": str(e)}
     
 def get_hospital_by_id(hospital_id: str):
-    for hospital in hospital_collection.find({"id": hospital_id}):
-        wallet = hospital.get("wallet", "")
-        if isinstance(wallet, str) and len(wallet) == 42 and wallet.startswith("0x"):
-            try:
-                int(wallet[2:], 16)
-                return hospital
-            except ValueError:
-                continue
+    try:
+        with get_supabase_connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT 
+                        h.hospital_id AS id,
+                        h.hospital_name,
+                        hw.address AS wallet,
+                        COALESCE(AVG(ST_Y(ea.location)), AVG(mock.latitude))::float8 AS lat,
+                        COALESCE(AVG(ST_X(ea.location)), AVG(mock.longitude))::float8 AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                    LEFT JOIN public.equipment_assets ea ON h.hospital_id = ea.hospital_id
+                    WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
+                    GROUP BY h.hospital_id, h.hospital_name, hw.address
+                    """,
+                    (str(hospital_id), str(hospital_id)),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {
+                        "id": str(row["id"]),
+                        "hospital_name": row["hospital_name"],
+                        "wallet": row["wallet"],
+                        "location": {"lat": row["lat"], "lon": row["lon"]},
+                    }
+    except Exception:
+        pass
     return None
 
 
@@ -396,14 +426,14 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
 
         return safe_request(
             "POST",
-            "http://localhost:8000/inventory/upload",
+            f"{BACKEND_URL}/inventory/upload",
             files=files
         )
 
     if name == "search_inventory":
         return safe_request(
             "GET",
-            "http://localhost:8000/inventory/search",
+            f"{BACKEND_URL}/inventory/search",
             params={
                 "equipment_type": int(args["equipment_type"]),
                 "quantity": args["quantity"]
@@ -411,7 +441,7 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         )
 
     if name == "get_hospitals":
-        hospitals = safe_request("GET", "http://localhost:8000/hospitals")
+        hospitals = safe_request("GET", f"{BACKEND_URL}/hospitals")
         if isinstance(hospitals, dict) and isinstance(hospitals.get("value"), list):
             hospitals = hospitals["value"]
         if not isinstance(hospitals, list):
@@ -435,11 +465,11 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         return valid_hospitals
 
     if name == "get_inventory":
-        return safe_request("GET", f"http://localhost:8000/inventory/{args['hospital_id']}")
+        return safe_request("GET", f"{BACKEND_URL}/inventory/{args['hospital_id']}")
 
     # ── GIS ──────────────────────────────────────────────────────────────
     if name == "find_nearest_hospitals":
-        hospitals = safe_request("GET", "http://localhost:8000/hospitals")
+        hospitals = safe_request("GET", f"{BACKEND_URL}/hospitals")
 
         if "error" in hospitals:
             return hospitals
@@ -474,7 +504,7 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
 
         res = safe_request(
             "POST",
-            "http://localhost:8001/gis/best-option",
+            f"{GIS_URL}/gis/best-option",
             json={
                 "origin": args,
                 "hospitals": gis_input
@@ -484,19 +514,20 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
         return res.get("data", res)   # 🔥 CRITICAL FIX
 
     if name == "get_route":
-        return safe_request(
+        res = safe_request(
             "POST",
-            "http://localhost:8001/gis/route",
+            f"{GIS_URL}/gis/route",
             json={
                 "source": args["origin"],   # 🔥 FIX
                 "destination": args["destination"]
             }
         )
+        return res.get("data", res)
 
     if name == "get_route_map_url":
         res = safe_request(
             "POST",
-            "http://localhost:8001/gis/route-map",
+            f"{GIS_URL}/gis/route",
             json={
                 "source": {
                     "lat": args["origin_lat"],
@@ -508,14 +539,17 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
                 }
             }
         )
-
-        if "map_file" in res:
-            res["map_url"] = f"http://localhost:8001/{res['map_file']}"  # 🔥 FIX
-
-        return res
+        route_data = res.get("data", res)
+        return {
+            "status": "success",
+            "distance_km": round((route_data.get("distance", 0) or 0) / 1000.0, 2),
+            "eta_min": route_data.get("traffic_adjusted_eta_min", round((route_data.get("duration", 0) or 0) / 60.0, 1)),
+            "traffic_status": route_data.get("traffic_status", "NORMAL"),
+            "geometry": route_data.get("geometry"),
+        }
 
     if name == "get_isochrone":
-        return safe_request("POST", "http://localhost:8001/gis/isochrone", json=args)
+        return safe_request("POST", f"{GIS_URL}/gis/isochrone", json=args)
 
     # ── Dispatch ─────────────────────────────────────────────────────────
     if name == "dispatch":
@@ -527,7 +561,7 @@ def execute_tool(name: str, args: dict, hospital_id: str = None, session_id: str
                 args.get("equipment_type", 1),
             ),
         }
-        return safe_request("POST", "http://localhost:8000/dispatch", json=normalized_args)
+        return safe_request("POST", f"{BACKEND_URL}/dispatch", json=normalized_args)
 
     # ── Approval gate ────────────────────────────────────────────────────
     if name == "request_user_approval":

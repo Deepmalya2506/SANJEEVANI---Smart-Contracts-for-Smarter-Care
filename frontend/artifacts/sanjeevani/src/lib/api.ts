@@ -164,3 +164,69 @@ export async function emitDeliveryConfirmed(input: Record<string, unknown>) {
 export async function emitLoanSettled(input: Record<string, unknown>) {
   return post("/events/loan-settled", input);
 }
+
+export async function getNetworkNodes() {
+  if (USE_MOCKS) {
+    return {
+      status: "success",
+      nodes: [
+        {
+          hospital_id: "st-martha",
+          hospital_name: "St. Martha Medical Centre",
+          latitude: 22.5726,
+          longitude: 88.3639,
+          h3_cell: "873cf2c60ffffff",
+          available_count: 5,
+          total_assets: 8,
+        },
+        {
+          hospital_id: "carebridge",
+          hospital_name: "CareBridge Network",
+          latitude: 22.5958,
+          longitude: 88.4112,
+          h3_cell: "873cf2c62ffffff",
+          available_count: 2,
+          total_assets: 6,
+        },
+        {
+          hospital_id: "northstar",
+          hospital_name: "Northstar Health Hub",
+          latitude: 22.5512,
+          longitude: 88.3498,
+          h3_cell: "873cf2c64ffffff",
+          available_count: 7,
+          total_assets: 12,
+        },
+      ],
+    };
+  }
+  return request<{ status: string; count: number; nodes: any[] }>("/api/v1/gis/network-nodes");
+}
+
+export async function searchSpatialCandidates(input: {
+  origin: { lat: number; lon: number };
+  equipment_type: string;
+  radius_km?: number;
+  max_eta_minutes?: number;
+}) {
+  return post<{ status: string; count: number; candidates: any[] }>("/api/v1/gis/candidates", input);
+}
+
+export async function getGisRoute(input: {
+  source: { lat: number; lon: number };
+  destination: { lat: number; lon: number };
+}) {
+  return post<{ status: string; data: any }>("/api/v1/gis/routes", input);
+}
+
+export async function getH3Footprint(lat: number, lon: number, k_rings = 2, resolution = 7) {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lon),
+    k_rings: String(k_rings),
+    resolution: String(resolution),
+  });
+  const res = await request<{ status: string; data: any }>(`/api/v1/gis/h3-footprint?${params}`);
+  return res.data;
+}
+

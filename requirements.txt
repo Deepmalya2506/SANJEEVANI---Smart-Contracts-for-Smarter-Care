@@ -14,3 +14,4 @@ web3
 geopy
 psycopg[binary]
 UUID
+h3>=4.0.0

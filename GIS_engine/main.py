@@ -1,9 +1,10 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from GIS_engine.routes import matrix, nearest
-from GIS_engine.routes import routes
+from fastapi.responses import HTMLResponse
+from GIS_engine.routes import routes, tiles
 
-app = FastAPI(title="Sanjeevani GIS Engine")
+app = FastAPI(title="Sanjeevani GIS Engine", version="3.0.0")
 
 app.add_middleware(
 	CORSMiddleware,
@@ -13,6 +14,15 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
-app.include_router(matrix.router, prefix="/gis")
-app.include_router(nearest.router, prefix="/gis")
+# Canonical GIS Routers
+app.include_router(tiles.router, prefix="/gis")
 app.include_router(routes.router, prefix="/gis")
+
+@app.get("/route-map", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
+def serve_route_map():
+    file_path = os.path.join(os.path.dirname(__file__), "route_map.html")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>GIS Launchpad Route Map not found</h1>", status_code=404)
