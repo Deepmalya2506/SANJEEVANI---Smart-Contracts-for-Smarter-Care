@@ -40,7 +40,11 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { previewDispatch, searchInventory, sendChat } from "@/lib/api";
+import { previewDispatch, searchInventory, sendChat, getGisRoute } from "@/lib/api";
+import { MapCommandPage } from "@/pages/MapCommandPage";
+import { MonitorPage } from "@/pages/MonitorPage";
+import { MapLibreView } from "@/components/map/MapLibreView";
+import { RoutePreviewModal } from "@/components/map/RoutePreviewModal";
 import heroImage from "@assets/Untitled_design_(1)_1787314419698.png";
 import assistantImage from "@assets/download_(55)_1787315213518.jpg";
 
@@ -180,7 +184,9 @@ function TopNav({
   const [mobileOpen, setMobileOpen] = useState(false);
   const links = [
     { href: "/dashboard", label: "Control room", icon: Radio },
+    { href: "/map", label: "GIS Command", icon: MapPin },
     { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
+    { href: "/monitor", label: "Live Tracker", icon: Truck },
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/assistant", label: "MCP assistant", icon: Bot },
   ];
@@ -626,74 +632,54 @@ function Dashboard({
                 <span className="eyebrow">02 / NETWORK VIEW</span>
                 <h2>Live logistics map</h2>
               </div>
-              <span className="map-legend">
-                <span className="legend-dot violet" /> active route
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="map-legend">
+                  <span className="legend-dot violet" /> active route
+                </span>
+                <Link
+                  href="/map"
+                  className="text-xs bg-secondary/80 hover:bg-secondary px-2.5 py-1 rounded font-medium flex items-center gap-1 transition"
+                >
+                  <MapPin size={12} /> Full GIS <ArrowRight size={11} />
+                </Link>
+              </div>
             </div>
-            <div className="map-canvas">
-              <div className="map-grid-lines" />
-              <div className="map-label label-one">SALT LAKE</div>
-              <div className="map-label label-two">PARK STREET</div>
-              <div className="map-label label-three">HOWRAH</div>
-              <svg
-                viewBox="0 0 700 470"
-                className="route-svg"
-                aria-label="Stylized network map"
-              >
-                <path
-                  d="M84 355 C190 320 208 155 340 202 S505 330 623 115"
-                  className="map-route route-dash"
-                />
-                <path
-                  d="M85 355 C190 320 208 155 340 202 S505 330 623 115"
-                  className={`map-route ${requested ? "route-active" : ""}`}
-                />
-                <circle cx="84" cy="355" r="13" className="iso-ring" />
-                <circle
-                  cx="84"
-                  cy="355"
-                  r="5"
-                  className="map-node hospital-node"
-                />
-                <circle
-                  cx="340"
-                  cy="202"
-                  r="11"
-                  className="iso-ring secondary-ring"
-                />
-                <circle cx="340" cy="202" r="5" className="map-node" />
-                <circle cx="623" cy="115" r="5" className="map-node" />
-                <circle
-                  cx="510"
-                  cy="336"
-                  r="4"
-                  className="map-node muted-node"
-                />
-              </svg>
-              <div className="node-callout origin">
-                <span className="pulse-dot" /> St. Martha · receiving
-              </div>
-              <div className="node-callout lender">
-                <span /> Aster Medisource · 12 min
-              </div>
-              <div className="map-scale">
-                <span>15 min reach</span>
-                <span>0</span>
-                <span>2 km</span>
-              </div>
+            <div className="map-canvas relative overflow-hidden h-[360px] rounded-lg">
+              <MapLibreView
+                origin={{
+                  lat: 22.5726,
+                  lon: 88.3639,
+                  label: "St. Martha (Receiving)",
+                }}
+                destination={{
+                  lat: 22.5850,
+                  lon: 88.3750,
+                  label: "Aster Medisource (Lender)",
+                }}
+                routeGeometry={{
+                  type: "LineString",
+                  coordinates: [
+                    [88.3639, 22.5726],
+                    [88.3700, 22.5790],
+                    [88.3750, 22.5850],
+                  ],
+                }}
+                trafficStatus="NORMAL"
+                trafficColor="#10B981"
+                className="w-full h-full"
+              />
             </div>
             <div className="map-footer">
               <span>
-                <MapPin size={14} /> Kolkata network · 12 active nodes
+                <MapPin size={14} /> Kolkata network · OpenFreeMap Vector Layer
               </span>
-              <button
-                type="button"
+              <Link
+                href="/map"
                 className="text-button"
-                onClick={() => setRequested(true)}
                 data-testid="button-recenter-map"
               >
-                Recenter <ArrowRight size={14} />
-              </button>
+                Open GIS Sandbox <ArrowRight size={14} />
+              </Link>
             </div>
           </Panel>
           <Panel className="status-panel">
@@ -783,16 +769,28 @@ function Marketplace({
   const [category, setCategory] = useState("All equipment");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
+  const [showMapDrawer, setShowMapDrawer] = useState(false);
+  const [radiusFilter, setRadiusFilter] = useState(30);
+  const [selectedLender, setSelectedLender] = useState<string | null>(null);
+
+  const marketplacePins = [
+    { hospital_id: "aster", hospital_name: "Aster Medisource", latitude: 22.5850, longitude: 88.3750, available_count: 4, distance_km: 2.4 },
+    { hospital_id: "carebridge", hospital_name: "CareBridge Network", latitude: 22.5958, longitude: 88.4112, available_count: 2, distance_km: 4.1 },
+    { hospital_id: "northstar", hospital_name: "Northstar Health", latitude: 22.5512, longitude: 88.3498, available_count: 7, distance_km: 7.8 },
+    { hospital_id: "swasthya", hospital_name: "Swasthya Collective", latitude: 22.6100, longitude: 88.3950, available_count: 3, distance_km: 9.2 },
+  ];
+
   const filtered = useMemo(
     () =>
       equipment.filter(
         (item) =>
           (category === "All equipment" || item.category === category) &&
+          (!selectedLender || item.lender === selectedLender) &&
           `${item.name} ${item.lender}`
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
-    [category, query],
+    [category, query, selectedLender],
   );
   const syncInventory = async () => {
     const equipmentType =
@@ -855,8 +853,66 @@ function Marketplace({
               ),
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setShowMapDrawer(!showMapDrawer)}
+            className={`outline-button text-xs font-semibold flex items-center gap-1.5 ${showMapDrawer ? "bg-primary/15 border-primary/40 text-primary" : ""}`}
+            data-testid="button-toggle-map-drawer"
+          >
+            <MapPin size={14} /> {showMapDrawer ? "Hide Map Drawer" : "Facility Map View"}
+          </button>
           <span className="result-count">{filtered.length} listings</span>
         </div>
+
+        {showMapDrawer && (
+          <div className="bg-card/70 border border-border/60 rounded-xl p-4 mb-4 flex flex-col gap-3 shadow-md animate-in fade-in-0 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="live-dot" />
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Facility Directory Explorer · OpenFreeMap Vector Canvas
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span>Radius Filter:</span>
+                  <select
+                    value={radiusFilter}
+                    onChange={(e) => setRadiusFilter(Number(e.target.value))}
+                    className="bg-background/80 border border-border/60 rounded px-2 py-0.5 text-xs font-medium"
+                  >
+                    <option value={5}>5 km</option>
+                    <option value={10}>10 km</option>
+                    <option value={20}>20 km</option>
+                    <option value={30}>30 km</option>
+                  </select>
+                </label>
+                {selectedLender && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLender(null)}
+                    className="text-xs text-primary font-semibold underline"
+                  >
+                    Reset Filter ({selectedLender})
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="h-[240px] w-full rounded-lg overflow-hidden border border-border/40">
+              <MapLibreView
+                origin={{ lat: 22.5726, lon: 88.3639, label: "Your Location" }}
+                candidates={marketplacePins.filter((p) => p.distance_km <= radiusFilter)}
+                selectedHospitalId={marketplacePins.find((p) => p.hospital_name === selectedLender)?.hospital_id}
+                onSelectHospital={(node) => setSelectedLender(node.hospital_name)}
+                className="w-full h-full"
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Click any facility marker to filter listings to that hospital.</span>
+              <span>Showing {marketplacePins.filter((p) => p.distance_km <= radiusFilter).length} facilities within {radiusFilter} km</span>
+            </div>
+          </div>
+        )}
         <div className="market-grid">
           {filtered.map((item) => (
             <article
@@ -1110,6 +1166,8 @@ function Assistant({
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [sessionId, setSessionId] = useState<string>();
+  const [routeModalOpen, setRouteModalOpen] = useState(false);
+  const [routeModalData, setRouteModalData] = useState<any>(null);
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       role: "assistant",
@@ -1134,6 +1192,42 @@ function Assistant({
         ...current,
         { role: "assistant", text: reply, time: "09:42" },
       ]);
+      if (
+        response.loan_proposal ||
+        response.map_url ||
+        reply.toLowerCase().includes("eta") ||
+        reply.toLowerCase().includes("route") ||
+        reply.toLowerCase().includes("ventilator") ||
+        reply.toLowerCase().includes("oxygen") ||
+        reply.toLowerCase().includes("hospital")
+      ) {
+        setRouteModalData({
+          title: "MCP Proposed Route Verification",
+          origin: {
+            lat: 22.5726,
+            lon: 88.3639,
+            label: "Your Facility (St. Martha)",
+          },
+          destination: {
+            lat: 22.5850,
+            lon: 88.3750,
+            label: "Aster Medisource / CareBridge",
+          },
+          distanceKm: 3.8,
+          etaMin: 18,
+          trafficStatus: "NORMAL",
+          trafficColor: "#10B981",
+          h3Cell: "873cf2c60ffffff",
+          routeGeometry: {
+            type: "LineString",
+            coordinates: [
+              [88.3639, 22.5726],
+              [88.3700, 22.5790],
+              [88.3750, 22.5850],
+            ],
+          },
+        });
+      }
       if (response.approval_required && response.session_id) {
         setSessionId(response.session_id);
       } else if (sessionId) {
@@ -1249,6 +1343,30 @@ function Assistant({
                       <Bot size={13} /> Sanjeevani MCP
                     </div>
                     <p>{message.text}</p>
+                    {routeModalData && (
+                      <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => setRouteModalOpen(true)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.4rem",
+                            padding: "0.45rem 0.85rem",
+                            borderRadius: "9999px",
+                            background: "#0F766E",
+                            color: "#ffffff",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            border: "none",
+                            cursor: "pointer",
+                            boxShadow: "0 2px 8px rgba(15,118,110,0.3)",
+                          }}
+                        >
+                          🗺️ View Route &amp; GIS Feasibility Preview
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ),
               )}
@@ -1284,6 +1402,23 @@ function Assistant({
           before dispatch.
         </span>
       </div>
+      <RoutePreviewModal
+        open={routeModalOpen}
+        onClose={() => setRouteModalOpen(false)}
+        title={routeModalData?.title}
+        origin={routeModalData?.origin}
+        destination={routeModalData?.destination}
+        distanceKm={routeModalData?.distanceKm}
+        etaMin={routeModalData?.etaMin}
+        trafficStatus={routeModalData?.trafficStatus}
+        trafficColor={routeModalData?.trafficColor}
+        h3Cell={routeModalData?.h3Cell}
+        routeGeometry={routeModalData?.routeGeometry}
+        onApprove={() => {
+          setRouteModalOpen(false);
+          send("yes");
+        }}
+      />
     </div>
   );
 }
@@ -1316,8 +1451,48 @@ function RouterContent({
         component={() => <Dashboard dark={dark} onToggle={onToggle} />}
       />
       <Route
+        path="/app/dashboard"
+        component={() => <Dashboard dark={dark} onToggle={onToggle} />}
+      />
+      <Route
+        path="/map"
+        component={() => (
+          <Shell dark={dark} onToggle={onToggle}>
+            <MapCommandPage />
+          </Shell>
+        )}
+      />
+      <Route
+        path="/app/map"
+        component={() => (
+          <Shell dark={dark} onToggle={onToggle}>
+            <MapCommandPage />
+          </Shell>
+        )}
+      />
+      <Route
         path="/marketplace"
         component={() => <Marketplace dark={dark} onToggle={onToggle} />}
+      />
+      <Route
+        path="/app/marketplace"
+        component={() => <Marketplace dark={dark} onToggle={onToggle} />}
+      />
+      <Route
+        path="/monitor"
+        component={() => (
+          <Shell dark={dark} onToggle={onToggle}>
+            <MonitorPage />
+          </Shell>
+        )}
+      />
+      <Route
+        path="/app/monitor"
+        component={() => (
+          <Shell dark={dark} onToggle={onToggle}>
+            <MonitorPage />
+          </Shell>
+        )}
       />
       <Route
         path="/analytics"
@@ -1325,6 +1500,10 @@ function RouterContent({
       />
       <Route
         path="/assistant"
+        component={() => <Assistant dark={dark} onToggle={onToggle} />}
+      />
+      <Route
+        path="/app/assistant"
         component={() => <Assistant dark={dark} onToggle={onToggle} />}
       />
       <Route component={NotFound} />
