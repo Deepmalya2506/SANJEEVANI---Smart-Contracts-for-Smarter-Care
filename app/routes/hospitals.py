@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+# pyrefly: ignore [missing-import]
 from psycopg.errors import UniqueViolation
 # pyrefly: ignore [missing-import]
 from psycopg.rows import dict_row, tuple_row
@@ -21,7 +22,10 @@ from app.schemas.hospital import (
     HospitalSignupResponse,
     ProfileSetupData,
 )
-from app.services.email_services import send_transactional_notification
+from app.services.email_services import (
+    get_recent_notifications,
+    send_transactional_notification,
+)
 from pydantic import BaseModel, EmailStr
 
 router = APIRouter()
@@ -147,6 +151,18 @@ def verify_facility_signup(data: HFRVerificationRequest):
         ) from exc
 
 
+import math
+
+
+def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2.0)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2.0)**2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(r * c, 4)
+
+
 @router.get("/api/v1/facilities/search")
 def search_facilities(
     query: str = "",
@@ -181,12 +197,16 @@ def search_facilities(
                         """,
                         (min(max(1, limit), 100),),
                     )
-                return cursor.fetchall()
+                res = cursor.fetchall()
+                if res:
+                    return res
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+            detail=f"Supabase database unavailable: {exc}",
         ) from exc
+
+    return []
 
 
 # ============================================================================
@@ -292,98 +312,246 @@ def list_nearby_hospitals(
                         for h in hospitals:
                             h["available_equipment_count"] = eq_map.get(h.get("hospital_id"), 0)
 
-                return hospitals
+                if hospitals:
+                    return hospitals
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+            detail=f"Supabase database unavailable: {exc}",
         ) from exc
+
+    return []
 
 
 @router.get("/hospitals")
 @router.get("/api/v1/organizations")
 def list_hospitals():
     """Returns registered hospitals from Supabase for frontend dashboard and network queries."""
-    with get_supabase_connection() as connection:
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT 
-                    h.hospital_id::text AS id,
-                    h.hospital_name AS name,
-                    h.mvp_hfr_id,
-                    h.profile_status AS status,
-                    h.verification_status,
-                    hw.address AS wallet,
-                    COALESCE(mock.latitude, 22.5726)::float8 AS lat,
-                    COALESCE(mock.longitude, 88.3639)::float8 AS lon
-                FROM public.hospitals h
-                LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
-                LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
-                WHERE h.profile_status = 'ACTIVE' OR h.verification_status = 'VERIFIED'
-                ORDER BY h.hospital_name ASC
-                """
-            )
-            rows = cursor.fetchall()
-            return [
-                {
-                    "id": r["id"],
-                    "hospital_id": r["id"],
-                    "name": r["name"],
-                    "hospital_name": r["name"],
-                    "mvp_hfr_id": r["mvp_hfr_id"],
-                    "status": r["status"],
-                    "wallet": r.get("wallet") or "",
-                    "location": {
-                        "lat": r["lat"],
-                        "lon": r["lon"],
-                    },
-                }
-                for r in rows
-            ]
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT 
+                        h.hospital_id::text AS id,
+                        h.hospital_name AS name,
+                        h.mvp_hfr_id,
+                        h.profile_status AS status,
+                        h.verification_status,
+                        hw.address AS wallet,
+                        COALESCE(mock.latitude, 22.5726)::float8 AS lat,
+                        COALESCE(mock.longitude, 88.3639)::float8 AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    WHERE h.profile_status = 'ACTIVE' OR h.verification_status = 'VERIFIED'
+                    ORDER BY h.hospital_name ASC
+                    """
+                )
+                rows = cursor.fetchall()
+                if rows:
+                    return [
+                        {
+                            "id": r["id"],
+                            "hospital_id": r["id"],
+                            "name": r["name"],
+                            "hospital_name": r["name"],
+                            "mvp_hfr_id": r["mvp_hfr_id"],
+                            "status": r["status"],
+                            "wallet": r.get("wallet") or "",
+                            "location": {
+                                "lat": r["lat"],
+                                "lon": r["lon"],
+                            },
+                        }
+                        for r in rows
+                    ]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Supabase database unavailable: {exc}",
+        ) from exc
+
+    return []
 
 
 @router.get("/hospitals/{hospital_id}")
 @router.get("/api/v1/organizations/{hospital_id}")
 def get_hospital_details(hospital_id: str):
     """Returns details for a specific registered hospital from Supabase."""
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT 
+                        h.hospital_id::text AS id,
+                        h.hospital_name AS name,
+                        h.mvp_hfr_id,
+                        h.profile_status AS status,
+                        h.verification_status,
+                        hw.address AS wallet,
+                        COALESCE(mock.latitude, 22.5726)::float8 AS lat,
+                        COALESCE(mock.longitude, 88.3639)::float8 AS lon
+                    FROM public.hospitals h
+                    LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
+                    LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
+                    WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
+                    LIMIT 1
+                    """,
+                    (hospital_id, hospital_id),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "id": row["id"],
+                        "hospital_id": row["id"],
+                        "name": row["name"],
+                        "hospital_name": row["name"],
+                        "mvp_hfr_id": row["mvp_hfr_id"],
+                        "status": row["status"],
+                        "wallet": row.get("wallet") or "",
+                        "location": {
+                            "lat": row["lat"],
+                            "lon": row["lon"],
+                        },
+                    }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Supabase database unavailable: {exc}",
+        ) from exc
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Hospital was not found in Supabase.",
+    )
+
+
+class HospitalRegistrationRequest(BaseModel):
+    admin_name: str
+    email: EmailStr | str
+    hospital_name: str
+    mvp_hfr_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    phone: str | None = None
+    address: str | None = None
+
+
+@router.post("/hospitals", status_code=status.HTTP_201_CREATED)
+@router.post("/api/v1/auth/register-hospital-admin", status_code=status.HTTP_201_CREATED)
+def register_hospital_and_admin(data: HospitalRegistrationRequest, background_tasks: BackgroundTasks):
+    """
+    Registers a hospital and administrator directly into Supabase (public.hospitals & public.users),
+    verifies with ABDM mock HFR in Supabase, and dispatches an onboarding welcome email.
+    """
+    hospital_id = uuid4()
+    user_id = uuid4()
+    auth_user_id = uuid4()
+
+    # Determine HFR ID and verify coordinates against Supabase public.abdm_mock_hfr
+    resolved_hfr_id = (data.mvp_hfr_id or "").strip()
+    lat = data.latitude
+    lon = data.longitude
+
     with get_supabase_connection() as connection:
         with connection.cursor(row_factory=dict_row) as cursor:
+            if not resolved_hfr_id:
+                cursor.execute(
+                    """
+                    SELECT mvp_hfr_id, hospital_name, latitude, longitude
+                    FROM public.abdm_mock_hfr
+                    WHERE LOWER(hospital_name) = LOWER(%s)
+                    LIMIT 1
+                    """,
+                    (data.hospital_name.strip(),),
+                )
+                match = cursor.fetchone()
+                if match:
+                    resolved_hfr_id = match["mvp_hfr_id"]
+                    if lat is None:
+                        lat = match["latitude"]
+                    if lon is None:
+                        lon = match["longitude"]
+                else:
+                    resolved_hfr_id = f"HFR-{uuid4().hex[:8].upper()}"
+
+            if lat is None or lon is None:
+                cursor.execute(
+                    "SELECT latitude, longitude FROM public.abdm_mock_hfr WHERE mvp_hfr_id = %s LIMIT 1",
+                    (resolved_hfr_id,),
+                )
+                hfr_row = cursor.fetchone()
+                if hfr_row and hfr_row.get("latitude") is not None:
+                    lat = float(hfr_row["latitude"])
+                    lon = float(hfr_row["longitude"])
+                else:
+                    lat = lat or 11.6358
+                    lon = lon or 92.7121
+
+            # Persist hospital and admin user in Supabase PostgreSQL
             cursor.execute(
                 """
-                SELECT 
-                    h.hospital_id::text AS id,
-                    h.hospital_name AS name,
-                    h.mvp_hfr_id,
-                    h.profile_status AS status,
-                    h.verification_status,
-                    hw.address AS wallet,
-                    COALESCE(mock.latitude, 22.5726)::float8 AS lat,
-                    COALESCE(mock.longitude, 88.3639)::float8 AS lon
-                FROM public.hospitals h
-                LEFT JOIN public.hospital_wallets hw ON h.hospital_id = hw.hospital_id
-                LEFT JOIN public.abdm_mock_hfr mock ON h.mvp_hfr_id = mock.mvp_hfr_id
-                WHERE h.hospital_id::text = %s OR h.mvp_hfr_id = %s
-                LIMIT 1
+                INSERT INTO public.hospitals (
+                    hospital_id, mvp_hfr_id, hospital_name, verification_status, profile_status
+                )
+                VALUES (%s, %s, %s, 'VERIFIED', 'ACTIVE')
+                ON CONFLICT (hospital_id) DO NOTHING
                 """,
-                (hospital_id, hospital_id),
+                (hospital_id, resolved_hfr_id, data.hospital_name.strip()),
             )
-            r = cursor.fetchone()
-            if not r:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found.")
-            return {
-                "id": r["id"],
-                "hospital_id": r["id"],
-                "name": r["name"],
-                "hospital_name": r["name"],
-                "mvp_hfr_id": r["mvp_hfr_id"],
-                "status": r["status"],
-                "wallet": r.get("wallet") or "",
-                "location": {
-                    "lat": r["lat"],
-                    "lon": r["lon"],
-                },
-            }
+            cursor.execute(
+                """
+                INSERT INTO public.users (
+                    user_id, auth_user_id, hospital_id, admin_name, user_mail, profile_completed
+                )
+                VALUES (%s, %s, %s, %s, %s, true)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                (user_id, auth_user_id, hospital_id, data.admin_name.strip(), str(data.email).strip()),
+            )
+            connection.commit()
+
+    # Dispatch welcome email
+    welcome_html = f"""
+    <h2>Welcome to SANJEEVANI</h2>
+    <p>Dear {data.admin_name},</p>
+    <p>Your hospital organization <strong>{data.hospital_name}</strong> (ABDM HFR: {resolved_hfr_id}) has been successfully registered on the SANJEEVANI network.</p>
+    <p>You can now list medical equipment in the network inventory, discover nearby hospital partners, and sanction equipment transactions with smart care workflows.</p>
+    <ul>
+        <li><strong>Hospital ID:</strong> {hospital_id}</li>
+        <li><strong>Administrator:</strong> {data.admin_name} ({data.email})</li>
+        <li><strong>Status:</strong> VERIFIED & ACTIVE</li>
+    </ul>
+    """
+    background_tasks.add_task(
+        send_transactional_notification,
+        hospital_id=hospital_id,
+        recipient_email=str(data.email).strip(),
+        event_type="ACCOUNT_REGISTERED",
+        subject=f"Welcome to SANJEEVANI — {data.hospital_name} Registered",
+        html_content=welcome_html,
+    )
+
+    return {
+        "success": True,
+        "hospital_id": str(hospital_id),
+        "user_id": str(user_id),
+        "hospital_name": data.hospital_name.strip(),
+        "admin_name": data.admin_name.strip(),
+        "admin_email": str(data.email).strip(),
+        "mvp_hfr_id": resolved_hfr_id,
+        "status": "ACTIVE",
+        "message": "Hospital administrator and organization registered successfully. Welcome email dispatched.",
+    }
+
+
+@router.get("/notifications")
+@router.get("/api/v1/notifications")
+def list_recent_notifications(limit: int = 50):
+    """Returns recent sent email notification logs from Supabase or memory buffer."""
+    return get_recent_notifications(limit=limit)
 
 
 # ============================================================================

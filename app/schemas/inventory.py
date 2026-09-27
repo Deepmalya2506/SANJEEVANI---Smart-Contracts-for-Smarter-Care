@@ -89,4 +89,5 @@ class SanctionTransactionRequest(BaseModel):
     asset_id: UUID | str | None = None
     amount_rupees: float = Field(default=1850.0, gt=0.0)
     duration_hours: int = Field(default=24, gt=0)
+    borrower_admin_email: str | None = None
     notes: dict | str | None = None

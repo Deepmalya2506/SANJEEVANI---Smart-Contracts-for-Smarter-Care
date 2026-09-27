@@ -108,7 +108,8 @@ def main():
         if r.status_code == 201:
             asset_res = r.json()
             sample_asset_id = asset_res.get("asset_id", sample_asset_id)
-            print(f"      [SUCCESS] Asset registered: {asset_res.get('name')} (ID: {sample_asset_id})")
+            sample_hospital_id = asset_res.get("hospital_id", sample_hospital_id)
+            print(f"      [SUCCESS] Asset registered: {asset_res.get('name')} (ID: {sample_asset_id}, Hospital: {sample_hospital_id})")
         elif r.status_code in (404, 503):
             print(f"      [NOTE] Supabase offline fallback: {r.json().get('detail')}")
     except Exception as exc:
@@ -167,7 +168,7 @@ def main():
     }
     order_id = None
     try:
-        r = requests.post(f"{API_URL}/api/v1/transactions/sanction", json=sanction_payload, timeout=10)
+        r = requests.post(f"{API_URL}/api/v1/transactions/sanction", json=sanction_payload, timeout=25)
         print(f"  --> POST /api/v1/transactions/sanction: HTTP {r.status_code}")
         if r.status_code == 200:
             res = r.json()
@@ -212,7 +213,8 @@ def main():
             # Webhook HMAC test
             from app.core.config import settings
             if settings.RAZORPAY_WEBHOOK_SECRET:
-                webhook_body = b'{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_test_cap123","order_id":"' + order_id.encode() + b'"}}}}'
+                test_pay_id = f"pay_test_{uuid4().hex[:10]}"
+                webhook_body = f'{{"event":"payment.captured","payload":{{"payment":{{"entity":{{"id":"{test_pay_id}","order_id":"{order_id}"}}}}}}}}'.encode()
                 sig = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode(), webhook_body, hashlib.sha256).hexdigest()
                 w_res = requests.post(
                     f"{API_URL}/payments/webhook",

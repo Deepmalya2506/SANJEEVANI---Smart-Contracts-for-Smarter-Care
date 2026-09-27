@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import io
 import json
 from uuid import UUID, uuid4
@@ -120,13 +121,25 @@ def create_equipment_asset(
     background_tasks: BackgroundTasks,
 ):
     asset_id = uuid4()
+    hospital_id = getattr(data, "hospital_id", None) or uuid4()
+    user_id = uuid4()
+    admin_name = "Administrator"
+    user_mail = None
 
     try:
         with get_supabase_connection() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
-                hospital_id, user_id, admin_name, user_mail, mvp_hfr_id = _resolve_hospital_and_admin(
+                resolved_hid, resolved_uid, resolved_aname, resolved_umail, mvp_hfr_id = _resolve_hospital_and_admin(
                     cursor, data.hospital_id, request
                 )
+                if resolved_hid:
+                    hospital_id = resolved_hid
+                if resolved_uid:
+                    user_id = resolved_uid
+                if resolved_aname:
+                    admin_name = resolved_aname
+                if resolved_umail:
+                    user_mail = resolved_umail
 
                 lat = data.latitude
                 lon = data.longitude
@@ -240,7 +253,7 @@ def create_equipment_asset(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+            detail=f"Supabase database unavailable: {exc}",
         ) from exc
 
 
@@ -383,8 +396,8 @@ async def upload_inventory_csv(
 @router.post("/transactions/sanction")
 def sanction_equipment_transaction(
     data: SanctionTransactionRequest,
-    request: Request,
-    background_tasks: BackgroundTasks,
+    request: Request = None,
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Sanctions an equipment loan between borrowing and lending hospitals.
@@ -417,6 +430,12 @@ def sanction_equipment_transaction(
                         detail=f"Invalid lender_hospital_id format: {exc}",
                     )
 
+                if borrower_hospital_id and lender_hospital_id == borrower_hospital_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Lender hospital and borrower hospital must be distinct organizations. A hospital cannot sanction an inter-hospital equipment loan to itself.",
+                    )
+
                 # 3. Locate or resolve matching equipment asset
                 asset_record = None
                 if data.asset_id:
@@ -427,7 +446,6 @@ def sanction_equipment_transaction(
                             SELECT asset_id, hospital_id, equipment_type, name, hourly_rate, availability_status
                             FROM public.equipment_assets
                             WHERE asset_id = %s AND hospital_id = %s
-                            FOR UPDATE
                             """,
                             (target_asset_uuid, lender_hospital_id),
                         )
@@ -445,40 +463,64 @@ def sanction_equipment_transaction(
                           AND LOWER(equipment_type) = LOWER(%s)
                           AND availability_status = 'AVAILABLE'
                         LIMIT 1
-                        FOR UPDATE
                         """,
                         (lender_hospital_id, data.equipment_type.strip()),
                     )
                     asset_record = cursor.fetchone()
 
-                resolved_asset_id = asset_record["asset_id"] if asset_record else uuid4()
-
-                # 4. Lock asset to RESERVED if found
-                if asset_record:
-                    cursor.execute(
-                        """
-                        UPDATE public.equipment_assets
-                        SET availability_status = 'RESERVED', updated_at = now()
-                        WHERE asset_id = %s
-                        """,
-                        (resolved_asset_id,),
+                if not asset_record:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="No available matching equipment asset exists in Supabase.",
                     )
 
-                # 5. Create or sanction loan entry
+                resolved_asset_id = asset_record["asset_id"]
+                cursor.execute(
+                    """
+                    UPDATE public.equipment_assets
+                    SET availability_status = 'RESERVED', updated_at = now()
+                    WHERE asset_id = %s AND availability_status = 'AVAILABLE'
+                    """,
+                    (resolved_asset_id,),
+                )
+                if cursor.rowcount != 1:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="The selected equipment asset is no longer available.",
+                    )
+
+                # 5. Create reservation and sanction loan entry
+                reservation_id = uuid4()
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO public.reservations (
+                            reservation_id, asset_id, borrower_hospital_id, starts_at, ends_at, hold_expires_at, status, idempotency_key
+                        )
+                        VALUES (%s, %s, %s, now(), now() + interval '%s hours', now() + interval '2 hours', 'CONFIRMED', %s)
+                        """,
+                        (reservation_id, resolved_asset_id, borrower_hospital_id, data.duration_hours, uuid4().hex),
+                    )
+                except Exception as res_err:
+                    print(f"[WARN] Reservation insert fallback: {res_err}")
+                    reservation_id = None
+
                 loan_id = uuid4()
                 cursor.execute(
                     """
                     INSERT INTO public.loans (
-                        loan_id, asset_id, lender_hospital_id, borrower_hospital_id,
-                        loan_status, duration_hours, notes
+                        loan_id, reservation_id, asset_id, lender_hospital_id, borrower_hospital_id,
+                        loan_status, amount, duration_hours, notes
                     )
-                    VALUES (%s, %s, %s, %s, 'APPROVED', %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, 'APPROVED', %s, %s, %s)
                     """,
                     (
                         loan_id,
+                        reservation_id,
                         resolved_asset_id,
                         lender_hospital_id,
                         borrower_hospital_id,
+                        data.amount_rupees,
                         data.duration_hours,
                         json.dumps(data.notes if isinstance(data.notes, dict) else {"notes": str(data.notes)}),
                     ),
@@ -494,6 +536,7 @@ def sanction_equipment_transaction(
                     """,
                     (uuid4(), loan_id, borrower_hospital_id),
                 )
+                connection.commit()
 
                 # 7. Create Razorpay Payment Order with exact conversion (Rupees -> Paise)
                 amount_paise = int(round(float(data.amount_rupees) * 100))
@@ -525,30 +568,56 @@ def sanction_equipment_transaction(
                 connection.commit()
 
                 # 9. Dispatch transactional notifications
+                recipients = []
                 for contact in admin_contacts:
                     if contact.get("user_mail"):
-                        sanction_email = f"""
-                        <h2>SANJEEVANI — Equipment Transaction Sanctioned</h2>
-                        <p>Dear {contact.get('admin_name', 'Administrator')},</p>
-                        <p>The equipment loan transaction for <strong>{data.equipment_type}</strong> has been successfully sanctioned.</p>
-                        <ul>
-                            <li><strong>Loan ID:</strong> {loan_id}</li>
-                            <li><strong>Transaction Amount:</strong> ₹{data.amount_rupees:,.2f} ({amount_paise} paise)</li>
-                            <li><strong>Razorpay Order ID:</strong> {order.get('order_id')}</li>
-                            <li><strong>Duration:</strong> {data.duration_hours} Hours</li>
-                            <li><strong>Asset Status:</strong> RESERVED</li>
-                        </ul>
-                        <p>Dispatch clearance is granted upon payment authorization.</p>
-                        """
+                        recipients.append({
+                            "email": contact["user_mail"],
+                            "name": contact.get("admin_name", "Administrator"),
+                        })
+
+                if data.borrower_admin_email and not any(r["email"].lower() == data.borrower_admin_email.strip().lower() for r in recipients):
+                    recipients.append({
+                        "email": data.borrower_admin_email.strip(),
+                        "name": "Borrower Administrator",
+                    })
+
+                for recipient in recipients:
+                    sanction_email = f"""
+                    <h2>SANJEEVANI — Equipment Transaction Sanctioned</h2>
+                    <p>Dear {recipient['name']},</p>
+                    <p>The equipment loan transaction for <strong>{data.equipment_type}</strong> has been successfully sanctioned.</p>
+                    <ul>
+                        <li><strong>Loan ID:</strong> {loan_id}</li>
+                        <li><strong>Transaction Amount:</strong> ₹{data.amount_rupees:,.2f} ({amount_paise} paise)</li>
+                        <li><strong>Razorpay Order ID:</strong> {order.get('order_id')}</li>
+                        <li><strong>Duration:</strong> {data.duration_hours} Hours</li>
+                        <li><strong>Asset Status:</strong> RESERVED</li>
+                    </ul>
+                    <p>Dispatch clearance is granted upon payment authorization.</p>
+                    """
+                    if background_tasks:
                         background_tasks.add_task(
                             send_transactional_notification,
                             hospital_id=borrower_hospital_id,
-                            recipient_email=contact["user_mail"],
+                            recipient_email=recipient["email"],
                             event_type="TRANSACTION_SANCTIONED",
                             subject=f"SANJEEVANI — Transaction Sanctioned: {data.equipment_type}",
                             html_content=sanction_email,
                             loan_id=loan_id,
                         )
+                    else:
+                        try:
+                            send_transactional_notification(
+                                hospital_id=borrower_hospital_id,
+                                recipient_email=recipient["email"],
+                                event_type="TRANSACTION_SANCTIONED",
+                                subject=f"SANJEEVANI — Transaction Sanctioned: {data.equipment_type}",
+                                html_content=sanction_email,
+                                loan_id=loan_id,
+                            )
+                        except Exception as notif_err:
+                            print(f"[WARN] Direct notification dispatch error: {notif_err}")
 
                 return {
                     "status": "SANCTIONED",
@@ -567,10 +636,12 @@ def sanction_equipment_transaction(
                 }
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+            detail=f"Supabase transaction unavailable: {exc}",
         ) from exc
 
 
@@ -582,45 +653,133 @@ EQUIPMENT_NUMERIC_MAP = {
     "4": "Infusion pump",
 }
 
-@router.get("/inventory/search", response_model=list[HospitalInventoryGroup])
-@router.get("/api/v1/inventory/search", response_model=list[HospitalInventoryGroup])
+@router.get("/inventory/search")
+@router.get("/api/v1/inventory/search")
 def search_inventory(
-    equipment_type: str = Query(..., min_length=1),
+    equipment_type: str | None = Query(default=None),
     quantity: int = Query(default=1, gt=0),
 ):
-    clean_type = equipment_type.strip()
-    resolved_type = EQUIPMENT_NUMERIC_MAP.get(clean_type, clean_type)
-
     try:
         with get_supabase_connection() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
-                cursor.execute(
-                    """
-                    SELECT 
-                        ea.hospital_id,
-                        h.hospital_name,
-                        ea.equipment_type,
-                        COUNT(ea.asset_id)::int AS available_count,
-                        AVG(ST_Y(ea.location))::float8 AS latitude,
-                        AVG(ST_X(ea.location))::float8 AS longitude
-                    FROM public.equipment_assets ea
-                    JOIN public.hospitals h ON ea.hospital_id = h.hospital_id
-                    WHERE (LOWER(ea.equipment_type) = LOWER(%s) OR LOWER(ea.equipment_type) = LOWER(%s))
-                      AND ea.availability_status = 'AVAILABLE'
-                      AND ea.shareable = true
-                      AND h.profile_status = 'ACTIVE'
-                    GROUP BY ea.hospital_id, h.hospital_name, ea.equipment_type
-                    HAVING COUNT(ea.asset_id) >= %s
-                    ORDER BY available_count DESC
-                    """,
-                    (clean_type, resolved_type, quantity),
-                )
+                if equipment_type and equipment_type.strip():
+                    clean_type = equipment_type.strip()
+                    resolved_type = EQUIPMENT_NUMERIC_MAP.get(clean_type, clean_type)
+                    cursor.execute(
+                        """
+                        SELECT 
+                            ea.hospital_id,
+                            h.hospital_name,
+                            ea.equipment_type,
+                            COUNT(ea.asset_id)::int AS available_count,
+                            AVG(ST_Y(ea.location))::float8 AS latitude,
+                            AVG(ST_X(ea.location))::float8 AS longitude
+                        FROM public.equipment_assets ea
+                        JOIN public.hospitals h ON ea.hospital_id = h.hospital_id
+                        WHERE (LOWER(ea.equipment_type) = LOWER(%s) OR LOWER(ea.equipment_type) = LOWER(%s))
+                          AND ea.availability_status = 'AVAILABLE'
+                          AND ea.shareable = true
+                        GROUP BY ea.hospital_id, h.hospital_name, ea.equipment_type
+                        HAVING COUNT(ea.asset_id) >= %s
+                        ORDER BY available_count DESC
+                        """,
+                        (clean_type, resolved_type, quantity),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT 
+                            ea.hospital_id,
+                            h.hospital_name,
+                            ea.equipment_type,
+                            COUNT(ea.asset_id)::int AS available_count,
+                            AVG(ST_Y(ea.location))::float8 AS latitude,
+                            AVG(ST_X(ea.location))::float8 AS longitude
+                        FROM public.equipment_assets ea
+                        JOIN public.hospitals h ON ea.hospital_id = h.hospital_id
+                        WHERE ea.availability_status = 'AVAILABLE'
+                          AND ea.shareable = true
+                        GROUP BY ea.hospital_id, h.hospital_name, ea.equipment_type
+                        HAVING COUNT(ea.asset_id) >= %s
+                        ORDER BY available_count DESC
+                        """,
+                        (quantity,),
+                    )
                 return cursor.fetchall()
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
-        ) from exc
+        print(f"[WARN] Supabase inventory search error: {exc}")
+        return []
+
+
+@router.get("/equipment/assets")
+@router.get("/api/v1/equipment/assets")
+def list_all_equipment_assets(
+    hospital_id: str | None = None,
+    availability_status: str | None = None,
+    limit: int = 50,
+):
+    """Returns all registered equipment assets with hospital details directly from Supabase."""
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                query = """
+                SELECT 
+                    ea.asset_id, ea.hospital_id, ea.equipment_type, ea.name,
+                    ea.serial_number, ea.condition_status, ea.availability_status,
+                    ea.shareable, ea.hourly_rate, ea.metadata, ea.created_at,
+                    h.hospital_name, h.mvp_hfr_id
+                FROM public.equipment_assets ea
+                LEFT JOIN public.hospitals h ON ea.hospital_id = h.hospital_id
+                WHERE 1=1
+                """
+                params = []
+                if hospital_id:
+                    query += " AND ea.hospital_id = %s"
+                    params.append(hospital_id)
+                if availability_status:
+                    query += " AND ea.availability_status = %s"
+                    params.append(availability_status)
+                query += " ORDER BY ea.created_at DESC LIMIT %s"
+                params.append(limit)
+                cursor.execute(query, tuple(params))
+                return cursor.fetchall()
+    except Exception as exc:
+        print(f"[WARN] Supabase equipment assets query failed: {exc}")
+        return []
+
+
+@router.get("/loans")
+@router.get("/api/v1/loans")
+def list_loans(hospital_id: str | None = None, limit: int = 50):
+    """Returns real equipment loans from Supabase."""
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                query = """
+                SELECT 
+                    l.loan_id, l.reservation_id, l.asset_id, l.borrower_hospital_id,
+                    l.lender_hospital_id, l.loan_status, l.amount, l.duration_hours,
+                    l.notes, l.created_at, l.updated_at,
+                    bh.hospital_name AS borrower_hospital_name,
+                    lh.hospital_name AS lender_hospital_name,
+                    ea.name AS asset_name, ea.equipment_type
+                FROM public.loans l
+                LEFT JOIN public.hospitals bh ON l.borrower_hospital_id = bh.hospital_id
+                LEFT JOIN public.hospitals lh ON l.lender_hospital_id = lh.hospital_id
+                LEFT JOIN public.equipment_assets ea ON l.asset_id = ea.asset_id
+                WHERE 1=1
+                """
+                params = []
+                if hospital_id:
+                    query += " AND (l.borrower_hospital_id = %s OR l.lender_hospital_id = %s)"
+                    params.extend([hospital_id, hospital_id])
+                query += " ORDER BY l.created_at DESC LIMIT %s"
+                params.append(limit)
+                cursor.execute(query, tuple(params))
+                return cursor.fetchall()
+    except Exception as exc:
+        print(f"[WARN] Supabase loans query failed: {exc}")
+        return []
 
 
 @router.get("/inventory/{hospital_id}", response_model=list[EquipmentAssetResponse])
@@ -641,9 +800,11 @@ def get_hospital_inventory(hospital_id: str):
                     """,
                     (hospital_id.strip(),),
                 )
-                return cursor.fetchall()
+                res = cursor.fetchall()
+                if res:
+                    return res
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase database unreachable: {exc}. Please verify SUPABASE_HOST and credentials in .env.",
+            detail=f"Supabase database unavailable: {exc}",
         ) from exc

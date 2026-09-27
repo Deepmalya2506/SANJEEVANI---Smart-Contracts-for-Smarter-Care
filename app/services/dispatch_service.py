@@ -32,8 +32,10 @@ def dispatch_logic(request_data: dict[str, Any]) -> dict[str, Any]:
     quantity = int(request_data.get("quantity", 1))
 
     loc = request_data.get("location") or {}
-    lat = float(loc.get("lat", loc.get("latitude", 22.5726)))
-    lon = float(loc.get("lon", loc.get("lng", loc.get("longitude", 88.3639))))
+    if "lat" not in loc and "latitude" not in loc or "lon" not in loc and "lng" not in loc and "longitude" not in loc:
+        return {"status": "INVALID_REQUEST", "message": "A real request location is required."}
+    lat = float(loc.get("lat", loc.get("latitude")))
+    lon = float(loc.get("lon", loc.get("lng", loc.get("longitude"))))
     origin = {"lat": lat, "lon": lon}
 
     max_eta = int(request_data.get("max_eta_minutes", 60))
@@ -129,17 +131,24 @@ def dispatch_logic(request_data: dict[str, Any]) -> dict[str, Any]:
     )
 
     if best_candidate is None:
-        # Fallback to the first candidate if GIS returned an alternative identifier
-        best_candidate = gis_candidates[0]
+        return {
+            "status": "GIS_ERROR",
+            "message": "GIS returned a hospital that was not present in the Supabase candidate set.",
+        }
 
     # Step 3: Produce Loan Proposal (Guarded by User Approval per Build Plan)
-    eta_minutes = best_data.get("eta_minutes") or best_data.get("eta") or 30
+    eta_minutes = best_data.get("eta_minutes") or best_data.get("eta")
+    if eta_minutes is None:
+        return {"status": "GIS_ERROR", "message": "GIS did not return an ETA."}
+    hourly_rate = best_candidate.get("avg_hourly_rate")
+    if hourly_rate is None:
+        return {"status": "PRICING_ERROR", "message": "No Supabase hourly rate is available for the selected asset."}
     proposal = {
         "id": f"disp-{str(best_candidate['hospital_id'])[:8]}",
         "status": "PROPOSED",
         "etaMinutes": eta_minutes,
         "lender": best_candidate.get("wallet_address"),
-        "amount": best_candidate.get("avg_hourly_rate", 1850),
+        "amount": hourly_rate,
         "selected_hospital": {
             "hospital_id": str(best_candidate["hospital_id"]),
             "hospital_name": best_candidate["hospital_name"],

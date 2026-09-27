@@ -1,4 +1,5 @@
 import smtplib
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from uuid import UUID, uuid4
@@ -30,6 +31,35 @@ def _ensure_notifications_table(cursor):
     )
 
 
+
+RECENT_NOTIFICATIONS: list[dict] = []
+
+
+def get_recent_notifications(limit: int = 50) -> list[dict]:
+    """Returns recent notification logs from Supabase or memory buffer."""
+    try:
+        with get_supabase_connection() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                _ensure_notifications_table(cursor)
+                cursor.execute(
+                    """
+                    SELECT notification_id::text, hospital_id::text, loan_id::text,
+                           channel, type AS event_type, status, error_message,
+                           created_at, sent_at
+                    FROM public.notifications
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+                db_results = cursor.fetchall()
+                if db_results:
+                    return db_results
+    except Exception:
+        pass
+    return list(reversed(RECENT_NOTIFICATIONS[-limit:]))
+
+
 def send_transactional_notification(
     hospital_id: UUID | str | None,
     recipient_email: str,
@@ -53,6 +83,22 @@ def send_transactional_notification(
         except (ValueError, AttributeError):
             l_uuid = None
 
+    entry = {
+        "notification_id": str(notification_id),
+        "hospital_id": str(h_uuid) if h_uuid else None,
+        "loan_id": str(l_uuid) if l_uuid else None,
+        "channel": "EMAIL",
+        "event_type": event_type,
+        "recipient_email": recipient_email,
+        "subject": subject,
+        "status": "SENT",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+    }
+    RECENT_NOTIFICATIONS.append(entry)
+    if len(RECENT_NOTIFICATIONS) > 100:
+        RECENT_NOTIFICATIONS.pop(0)
+
     # 1. Initialize notification ledger entry as PENDING
     db_available = False
     try:
@@ -75,6 +121,8 @@ def send_transactional_notification(
 
     # If SMTP credentials are missing, mark as SKIPPED and exit
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        entry["status"] = "MOCK_SENT"
+        entry["note"] = "SMTP not configured in environment; notification queued in test ledger."
         if db_available:
             try:
                 with get_supabase_connection() as connection:
@@ -108,6 +156,7 @@ def send_transactional_notification(
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(settings.SMTP_FROM_EMAIL, [recipient_email], message.as_string())
 
+        entry["status"] = "DELIVERED"
         # 4. Mark notification as SENT
         with get_supabase_connection() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
@@ -126,6 +175,8 @@ def send_transactional_notification(
 
     except Exception as exc:
         print(f"[ERROR] Transactional email sending failed: {exc}")
+        entry["status"] = "FAILED"
+        entry["error_message"] = str(exc)
         if db_available:
             try:
                 with get_supabase_connection() as connection:

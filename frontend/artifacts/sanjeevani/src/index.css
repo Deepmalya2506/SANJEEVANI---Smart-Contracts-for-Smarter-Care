@@ -2807,3 +2807,195 @@ textarea {
     inset: -1px;
   }
 }
+
+/* ==========================================================================
+   Admin & ABDM Network Workflow Styles
+   ========================================================================== */
+.workflow-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 24px;
+}
+.workflow-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.6);
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.workflow-step-btn:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  color: hsl(var(--foreground));
+}
+.workflow-step-btn.active {
+  background: hsl(var(--primary) / 0.12);
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+  box-shadow: 0 0 16px hsl(var(--primary) / 0.15);
+}
+.workflow-step-btn.completed {
+  border-color: hsl(152 69% 45% / 0.4);
+  color: hsl(152 69% 45%);
+}
+.workflow-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflow-step-btn.active .workflow-step-num {
+  background: hsl(var(--primary));
+  color: white;
+}
+.workflow-step-btn.completed .workflow-step-num {
+  background: hsl(152 69% 45%);
+  color: white;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 11px;
+  background: hsl(var(--background) / 0.4);
+  color: hsl(var(--muted-foreground));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.input-wrap:focus-within {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3);
+}
+.input-wrap input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  color: hsl(var(--foreground));
+  border: 0;
+  outline: 0;
+  font: 500 13px var(--app-font-sans);
+}
+.input-wrap input::placeholder {
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 900px) {
+  .workflow-grid {
+    grid-template-columns: 1.2fr 0.8fr;
+  }
+}
+
+.abdm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: hsl(152 69% 45% / 0.15);
+  color: hsl(152 69% 45%);
+  border: 1px solid hsl(152 69% 45% / 0.3);
+}
+
+.nearby-card {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.5);
+  transition: border-color 0.2s, transform 0.2s;
+  margin-bottom: 12px;
+}
+.nearby-card:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  transform: translateY(-1px);
+}
+.nearby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.nearby-distance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.notifications-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+.notifications-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.notifications-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  border-bottom: 1px solid hsl(var(--border));
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+.notifications-table td {
+  padding: 12px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+.event-tag {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 10px;
+}
+.event-tag.ACCOUNT_REGISTERED {
+  background: hsl(210 100% 50% / 0.15);
+  color: hsl(210 100% 60%);
+}
+.event-tag.EQUIPMENT_REGISTERED {
+  background: hsl(280 100% 50% / 0.15);
+  color: hsl(280 100% 70%);
+}
+.event-tag.TRANSACTION_SANCTIONED {
+  background: hsl(38 100% 50% / 0.15);
+  color: hsl(38 100% 60%);
+}
+.event-tag.PAYMENT_CONFIRMED {
+  background: hsl(152 69% 45% / 0.15);
+  color: hsl(152 69% 50%);
+}
+

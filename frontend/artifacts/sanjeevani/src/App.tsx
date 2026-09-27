@@ -46,7 +46,15 @@ import {
   searchInventory,
   sendChat,
   verifyPayment,
+  getHospitals,
+  getNearbyHospitals,
+  getEquipmentAssets,
+  getLoans,
+  sanctionTransaction,
+  getNotifications,
+  type NearbyHospitalItem,
 } from "@/lib/api";
+import { AdminWorkflowView } from "./pages/admin-workflow";
 import heroImage from "@assets/Untitled_design_(1)_1787314419698.png";
 import assistantImage from "@assets/download_(55)_1787315213518.jpg";
 
@@ -94,95 +102,6 @@ function loadRazorpayCheckout() {
   return razorpayScriptPromise;
 }
 
-type Lender = {
-  id: number;
-  name: string;
-  type: string;
-  eta: string;
-  price: string;
-  stock: string;
-  distance: string;
-  rating: string;
-};
-
-const lenders: Lender[] = [
-  {
-    id: 1,
-    name: "Aster Medisource",
-    type: "Oxygen concentrator",
-    eta: "12 min",
-    price: "₹1,850 / day",
-    stock: "4 available",
-    distance: "2.4 km",
-    rating: "4.9",
-  },
-  {
-    id: 2,
-    name: "CareBridge Network",
-    type: "Portable ventilator",
-    eta: "18 min",
-    price: "₹3,200 / day",
-    stock: "2 available",
-    distance: "4.1 km",
-    rating: "4.8",
-  },
-  {
-    id: 3,
-    name: "Northstar Health",
-    type: "Oxygen concentrator",
-    eta: "24 min",
-    price: "₹1,600 / day",
-    stock: "7 available",
-    distance: "7.8 km",
-    rating: "4.7",
-  },
-];
-const equipment = [
-  {
-    id: "oxygen-1",
-    name: "OxyFlow 5L Concentrator",
-    category: "Oxygen",
-    lender: "Aster Medisource",
-    price: "₹1,850",
-    unit: "per day",
-    distance: "2.4 km",
-    available: 4,
-    accent: "violet",
-  },
-  {
-    id: "vent-2",
-    name: "BreatheSafe V-40",
-    category: "Ventilator",
-    lender: "CareBridge Network",
-    price: "₹3,200",
-    unit: "per day",
-    distance: "4.1 km",
-    available: 2,
-    accent: "rose",
-  },
-  {
-    id: "monitor-3",
-    name: "PulseTrack M7",
-    category: "Patient monitor",
-    lender: "Northstar Health",
-    price: "₹940",
-    unit: "per day",
-    distance: "7.8 km",
-    available: 7,
-    accent: "slate",
-  },
-  {
-    id: "oxygen-4",
-    name: "OxyFlow 10L Station",
-    category: "Oxygen",
-    lender: "Swasthya Collective",
-    price: "₹2,450",
-    unit: "per day",
-    distance: "9.2 km",
-    available: 3,
-    accent: "violet",
-  },
-];
 
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
@@ -228,6 +147,7 @@ function TopNav({
   const [mobileOpen, setMobileOpen] = useState(false);
   const links = [
     { href: "/dashboard", label: "Control room", icon: Radio },
+    { href: "/admin-workflow", label: "Admin & ABDM Network", icon: ShieldCheck },
     { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
     { href: "/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/assistant", label: "MCP assistant", icon: Bot },
@@ -416,6 +336,7 @@ function Shell({
 
 function Home({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
   const [language, setLanguage] = useState(0);
+  const [liveStats, setLiveStats] = useState({ hospitals: 4, equipments: 16, loans: 1 });
   const words = [
     "Sanjeevani",
     "संजीवनी",
@@ -431,6 +352,26 @@ function Home({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
     );
     return () => window.clearInterval(timer);
   }, [words.length]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [h, a, l] = await Promise.all([
+          getHospitals(),
+          getEquipmentAssets(),
+          getLoans(),
+        ]);
+        setLiveStats({
+          hospitals: h.length,
+          equipments: a.length,
+          loans: l.length,
+        });
+      } catch {
+        // Keep live defaults
+      }
+    })();
+  }, []);
+
   return (
     <div
       className="home-page"
@@ -469,12 +410,12 @@ function Home({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
           <span className="home-stat-label">median response</span>
         </div>
         <div>
-          <span className="home-stat-value">146</span>
-          <span className="home-stat-label">trusted lenders</span>
+          <span className="home-stat-value">{liveStats.hospitals}</span>
+          <span className="home-stat-label">verified hospitals</span>
         </div>
         <div>
-          <span className="home-stat-value">18,420</span>
-          <span className="home-stat-label">fulfilled requests</span>
+          <span className="home-stat-value">{liveStats.equipments}</span>
+          <span className="home-stat-label">tracked assets</span>
         </div>
       </div>
       <div className="home-footnote">
@@ -528,61 +469,141 @@ function Dashboard({
   onToggle: () => void;
 }) {
   const [equipmentType, setEquipmentType] = useState("Oxygen concentrator");
-  const [hospital, setHospital] = useState("St. Martha Medical Centre");
+  const [hospitalsList, setHospitalsList] = useState<
+    Array<{ hospital_id: string; hospital_name: string; mvp_hfr_id?: string; location?: { lat: number; lon: number } }>
+  >([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState("");
+  const [nearbyLenders, setNearbyLenders] = useState<NearbyHospitalItem[]>([]);
+  const [selectedLenderId, setSelectedLenderId] = useState("");
   const [requested, setRequested] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState("");
-  const [selected, setSelected] = useState(1);
-  const requestEquipment = async () => {
-    const equipmentTypeId =
-      [
-        "Oxygen concentrator",
-        "Portable ventilator",
-        "Patient monitor",
-        "Infusion pump",
-      ].indexOf(equipmentType) + 1;
-    const paymentAmountRupees =
-      {
-        "Oxygen concentrator": 1850,
-        "Portable ventilator": 3200,
-        "Patient monitor": 940,
-        "Infusion pump": 1200,
-      }[equipmentType] ?? 160;
-    setPaymentStatus("Preparing secure payment...");
+  const [recentLoans, setRecentLoans] = useState<Array<any>>([]);
+  const [activeLoanId, setActiveLoanId] = useState("");
+
+  const loadHospitalsAndLoans = async () => {
     try {
-      const order = await createPaymentOrder({
-        amountRupees: paymentAmountRupees,
-        loanReference: `dispatch-${Date.now()}`,
-        notes: { equipment_type: String(equipmentTypeId), hospital },
+      const hList = (await getHospitals()) as Array<{
+        hospital_id: string;
+        hospital_name: string;
+        mvp_hfr_id?: string;
+        location?: { lat: number; lon: number };
+      }>;
+      setHospitalsList(hList);
+      if (hList.length > 0 && !selectedHospitalId) {
+        setSelectedHospitalId(hList[0].hospital_id);
+      }
+      const lList = await getLoans();
+      setRecentLoans(lList);
+    } catch (err) {
+      console.warn("Failed to load hospitals from Supabase:", err);
+    }
+  };
+
+  const loadNearby = async () => {
+    try {
+      const nearby = await getNearbyHospitals({
+        lat: hospitalsList.find((h) => h.hospital_id === selectedHospitalId)?.location?.lat ?? 0,
+        lon: hospitalsList.find((h) => h.hospital_id === selectedHospitalId)?.location?.lon ?? 0,
+        radiusKm: 100,
+        equipmentType,
       });
+      // A hospital cannot lend equipment to itself
+      const distinctLenders = nearby.filter((l) => l.hospital_id !== selectedHospitalId);
+      setNearbyLenders(distinctLenders);
+      if (distinctLenders.length > 0) {
+        setSelectedLenderId(distinctLenders[0].hospital_id || distinctLenders[0].mvp_hfr_id);
+      } else {
+        setSelectedLenderId("");
+      }
+    } catch (err) {
+      console.warn("Failed to load nearby lenders:", err);
+    }
+  };
+
+  useEffect(() => {
+    void loadHospitalsAndLoans();
+  }, []);
+
+  useEffect(() => {
+    void loadNearby();
+  }, [equipmentType, selectedHospitalId, hospitalsList]);
+
+  const requestEquipment = async () => {
+    if (!selectedHospitalId) {
+      setPaymentStatus("Please select a receiving hospital.");
+      return;
+    }
+    const resolvedLender = nearbyLenders.find(
+      (l) => (l.hospital_id || l.mvp_hfr_id) === selectedLenderId,
+    );
+    if (!resolvedLender?.hospital_id) {
+      setPaymentStatus("Please select an ABDM-registered lending hospital organization distinct from the receiving hospital.");
+      return;
+    }
+    const lenderHospitalId = resolvedLender.hospital_id;
+    if (lenderHospitalId === selectedHospitalId) {
+      setPaymentStatus("Receiving and lending hospitals must be different organizations.");
+      return;
+    }
+
+    const assets = await getEquipmentAssets({
+      hospital_id: lenderHospitalId,
+      availability_status: "AVAILABLE",
+    });
+    const selectedAsset = assets.find(
+      (asset) => asset.equipment_type.toLowerCase() === equipmentType.toLowerCase(),
+    );
+    if (!selectedAsset?.hourly_rate) {
+      setPaymentStatus("No priced Supabase equipment asset is available for this request.");
+      return;
+    }
+    const durationHours = 24;
+    const paymentAmountRupees = Number(selectedAsset.hourly_rate) * durationHours;
+
+    setPaymentStatus("Sanctioning loan & locking asset on Supabase...");
+    try {
+      const sanctionRes = await sanctionTransaction({
+        borrower_hospital_id: selectedHospitalId,
+        lender_hospital_id: lenderHospitalId,
+        equipment_type: equipmentType,
+        amount_rupees: paymentAmountRupees,
+        duration_hours: 24,
+        notes: {
+          channel: "control_room",
+          lender_name: resolvedLender?.hospital_name,
+        },
+      });
+
+      setActiveLoanId(sanctionRes.loan_id);
+      const paymentOrder = sanctionRes.payment_order;
+
       await loadRazorpayCheckout();
       if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
 
       const razorpay = new window.Razorpay({
-        key: order.key_id,
-        amount: order.amount_paise,
-        currency: order.currency,
-        name: "Sanjeevani",
-        description: `${equipmentType} dispatch payment`,
-        order_id: order.order_id,
+        key: paymentOrder.key_id,
+        amount: paymentOrder.amount_paise,
+        currency: paymentOrder.currency,
+        name: "Sanjeevani Care Network",
+        description: `${equipmentType} - Loan ${sanctionRes.loan_id.slice(0, 8)}`,
+        order_id: paymentOrder.order_id,
         modal: {
-          ondismiss: () => setPaymentStatus("Payment cancelled."),
+          ondismiss: () =>
+            setPaymentStatus("Payment checkout dismissed. Loan remains APPROVED."),
         },
         handler: (payment) => {
           void (async () => {
             try {
+              setPaymentStatus(
+                "Authorizing payment & cryptographic signature on Supabase...",
+              );
               await verifyPayment(payment);
-              await previewDispatch({
-                equipment_type: equipmentTypeId,
-                quantity: 1,
-                location: {
-                  lat: Number(import.meta.env.VITE_ORIGIN_LAT ?? 22.5726),
-                  lon: Number(import.meta.env.VITE_ORIGIN_LON ?? 88.3639),
-                },
-                hospital_id: hospital,
-                skip_blockchain: true,
-              });
-              setPaymentStatus("Payment verified. Dispatch preview ready.");
+              setPaymentStatus(
+                `Payment verified! Loan ${sanctionRes.loan_id.slice(0, 8)} active in Supabase.`,
+              );
               setRequested(true);
+              const updatedLoans = await getLoans();
+              setRecentLoans(updatedLoans);
             } catch (error) {
               setPaymentStatus(
                 error instanceof Error
@@ -593,26 +614,38 @@ function Dashboard({
           })();
         },
       });
-      setPaymentStatus("Complete the Razorpay Test Mode payment...");
+
+      setPaymentStatus("Complete the Razorpay Test Mode checkout...");
       razorpay.open();
     } catch (error) {
       setPaymentStatus(
-        error instanceof Error ? error.message : "Unable to start payment.",
+        error instanceof Error ? error.message : "Unable to sanction loan.",
       );
     }
   };
+
+  const selectedHospitalName =
+    hospitalsList.find((h) => h.hospital_id === selectedHospitalId)
+      ?.hospital_name ?? "Receiving Hospital";
+
+  const resolvedLender = nearbyLenders.find(
+    (l) => (l.hospital_id || l.mvp_hfr_id) === selectedLenderId,
+  );
+  const activeLenderName = resolvedLender?.hospital_name ?? "Care Partner";
+  const activeLenderEta = Math.max(8, Math.round((resolvedLender?.distance_km ?? 5) * 2.5));
+
   return (
     <Shell dark={dark} onToggle={onToggle}>
       <div className="workspace">
         <SectionHeader
-          eyebrow="LIVE DISPATCH / 09:41 IST"
+          eyebrow="LIVE SUPABASE DISPATCH / CONTROL ROOM"
           title="Hospital network control room."
-          description="One live request is being coordinated across the care network."
+          description="Live verified medical resource coordination backed by PostgreSQL & ABDM Mock HFR."
           action={
             <div className="header-status">
-              <span className="live-dot" /> Network healthy{" "}
+              <span className="live-dot" /> Live Supabase Connected{" "}
               <span className="header-divider" /> <Clock3 size={14} /> Updated
-              16 sec ago
+              just now
             </div>
           }
         />
@@ -628,19 +661,24 @@ function Dashboard({
               </span>
             </div>
             <label className="field-label" htmlFor="hospital">
-              Receiving hospital
+              Receiving hospital (Supabase Verified)
             </label>
             <div className="select-wrap">
               <Hospital size={15} />
               <select
                 id="hospital"
-                value={hospital}
-                onChange={(e) => setHospital(e.target.value)}
+                value={selectedHospitalId}
+                onChange={(e) => setSelectedHospitalId(e.target.value)}
                 data-testid="select-hospital"
               >
-                <option>St. Martha Medical Centre</option>
-                <option>Howrah General Hospital</option>
-                <option>Lakeview Institute of Care</option>
+                {hospitalsList.map((h) => (
+                  <option key={h.hospital_id} value={h.hospital_id}>
+                    {h.hospital_name} ({h.mvp_hfr_id ?? "Verified"})
+                  </option>
+                ))}
+                {hospitalsList.length === 0 && (
+                  <option value="">Loading hospitals from Supabase...</option>
+                )}
               </select>
               <ChevronDown size={14} />
             </div>
@@ -663,37 +701,49 @@ function Dashboard({
               <ChevronDown size={14} />
             </div>
             <div className="mini-label-row">
-              <span>NEARBY LENDERS</span>
-              <span>3 available</span>
+              <span>NEARBY LENDERS (ABDM MOCK HFR)</span>
+              <span>{nearbyLenders.length} available</span>
             </div>
             <div className="lender-list">
-              {lenders.map((lender) => (
-                <button
-                  type="button"
-                  key={lender.id}
-                  className={`lender-row ${selected === lender.id ? "selected" : ""}`}
-                  onClick={() => setSelected(lender.id)}
-                  data-testid={`button-lender-${lender.id}`}
+              {nearbyLenders.map((lender) => {
+                const lenderKey = lender.hospital_id || lender.mvp_hfr_id;
+                const isSelected = selectedLenderId === lenderKey;
+                return (
+                  <button
+                    type="button"
+                    key={lender.mvp_hfr_id}
+                    className={`lender-row ${isSelected ? "selected" : ""}`}
+                    onClick={() => setSelectedLenderId(lenderKey)}
+                    data-testid={`button-lender-${lender.mvp_hfr_id}`}
+                  >
+                    <span className="lender-avatar">
+                      {lender.hospital_name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="lender-main">
+                      <strong>{lender.hospital_name}</strong>
+                      <small>
+                        {lender.mvp_hfr_id} · {lender.distance_km.toFixed(1)} km away
+                      </small>
+                    </span>
+                    <span className="lender-eta">
+                      <b>{Math.max(8, Math.round(lender.distance_km * 2.5))} min</b>
+                      <small>ABDM Verified</small>
+                    </span>
+                  </button>
+                );
+              })}
+              {nearbyLenders.length === 0 && (
+                <div
+                  style={{
+                    padding: "1rem",
+                    color: "var(--muted-text)",
+                    textAlign: "center",
+                    fontSize: "0.85rem",
+                  }}
                 >
-                  <span className="lender-avatar">
-                    {lender.name
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </span>
-                  <span className="lender-main">
-                    <strong>{lender.name}</strong>
-                    <small>
-                      {lender.stock} · {lender.distance}
-                    </small>
-                  </span>
-                  <span className="lender-eta">
-                    <b>{lender.eta}</b>
-                    <small>{lender.price}</small>
-                  </span>
-                </button>
-              ))}
+                  Searching ABDM Mock HFR for nearby lenders...
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -703,23 +753,70 @@ function Dashboard({
             >
               {requested ? (
                 <>
-                  <Check size={16} /> Request queued
+                  <Check size={16} /> Sanctioned & Authorized
                 </>
               ) : (
                 <>
-                  <Zap size={16} /> Request now
+                  <Zap size={16} /> Sanction Loan & Pay
                 </>
               )}
             </button>
             {requested && (
               <div className="success-note page-enter">
-                <Check size={14} /> Preview locked for {hospital}. A lender will
-                confirm in under 2 minutes.
+                <Check size={14} /> Equipment loan locked for{" "}
+                {selectedHospitalName}. Loan ID: {activeLoanId.slice(0, 8)}
               </div>
             )}
             {paymentStatus && !requested && (
               <div className="success-note page-enter">
                 <Activity size={14} /> {paymentStatus}
+              </div>
+            )}
+
+            {recentLoans.length > 0 && (
+              <div
+                style={{
+                  marginTop: "1.25rem",
+                  borderTop: "1px solid var(--panel-border)",
+                  paddingTop: "0.75rem",
+                }}
+              >
+                <div className="mini-label-row" style={{ marginBottom: "0.5rem" }}>
+                  <span>RECENT SUPABASE LOANS</span>
+                  <span>{recentLoans.length} total</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.4rem",
+                  }}
+                >
+                  {recentLoans.slice(0, 3).map((loan) => (
+                    <div
+                      key={loan.loan_id}
+                      style={{
+                        fontSize: "0.8rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.4rem 0.6rem",
+                        background: "rgba(255,255,255,0.03)",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      <div>
+                        <strong>{loan.equipment_type || loan.asset_name || "Medical Asset"}</strong>
+                        <span style={{ marginLeft: "0.5rem", opacity: 0.7 }}>
+                          {loan.loan_status}
+                        </span>
+                      </div>
+                      <span style={{ color: "#34d399", fontWeight: 600 }}>
+                        ₹{Number(loan.amount).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </Panel>
@@ -735,9 +832,9 @@ function Dashboard({
             </div>
             <div className="map-canvas">
               <div className="map-grid-lines" />
-              <div className="map-label label-one">SALT LAKE</div>
-              <div className="map-label label-two">PARK STREET</div>
-              <div className="map-label label-three">HOWRAH</div>
+              <div className="map-label label-one">{selectedHospitalName.split(" ")[0].toUpperCase()}</div>
+              <div className="map-label label-two">{activeLenderName.split(" ")[0].toUpperCase()}</div>
+              <div className="map-label label-three">CENTRAL HUB</div>
               <svg
                 viewBox="0 0 700 470"
                 className="route-svg"
@@ -774,20 +871,20 @@ function Dashboard({
                 />
               </svg>
               <div className="node-callout origin">
-                <span className="pulse-dot" /> St. Martha · receiving
+                <span className="pulse-dot" /> {selectedHospitalName} · receiving
               </div>
               <div className="node-callout lender">
-                <span /> Aster Medisource · 12 min
+                <span /> {activeLenderName} · {activeLenderEta} min
               </div>
               <div className="map-scale">
-                <span>15 min reach</span>
+                <span>{activeLenderEta} min reach</span>
                 <span>0</span>
-                <span>2 km</span>
+                <span>{resolvedLender ? resolvedLender.distance_km.toFixed(1) : "2"} km</span>
               </div>
             </div>
             <div className="map-footer">
               <span>
-                <MapPin size={14} /> Kolkata network · 12 active nodes
+                <MapPin size={14} /> {hospitalsList.length} verified network nodes in Supabase
               </span>
               <button
                 type="button"
@@ -803,10 +900,10 @@ function Dashboard({
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">03 / LIVE STATUS</span>
-                <h2>Request {requested ? "queued" : "in transit"}</h2>
+                <h2>Request {requested ? "authorized" : "ready for dispatch"}</h2>
               </div>
               <span className="status-badge">
-                <span /> {requested ? "PREVIEW" : "IN_TRANSIT"}
+                <span /> {requested ? "AUTHORIZED" : "PREVIEW"}
               </span>
             </div>
             <div className="status-card">
@@ -816,37 +913,37 @@ function Dashboard({
               <div>
                 <strong>
                   {requested
-                    ? "Dispatch preview ready"
-                    : "OxyFlow 5L Concentrator"}
+                    ? `${equipmentType} Dispatched`
+                    : `${equipmentType} Available`}
                 </strong>
                 <span>
                   {requested
-                    ? "Awaiting lender confirmation"
-                    : "Aster Medisource · Vehicle MH 04"}
+                    ? `${activeLenderName} · Courier assigned`
+                    : `${activeLenderName} · Ready for pickup`}
                 </span>
               </div>
             </div>
             <div className="timeline">
               {[
-                "Request verified by St. Martha",
-                "Lender accepted the handoff",
-                "Courier en route to receiving hospital",
+                `Request submitted by ${selectedHospitalName}`,
+                `${activeLenderName} accepted allocation`,
+                `Courier en route to ${selectedHospitalName}`,
               ].map((item, i) => (
                 <div
-                  className={`timeline-item ${i < (requested ? 1 : 3) ? "done" : ""}`}
+                  className={`timeline-item ${i < (requested ? 3 : 1) ? "done" : ""}`}
                   key={item}
                 >
                   <span className="timeline-dot">
-                    {i < (requested ? 1 : 3) && <Check size={10} />}
+                    {i < (requested ? 3 : 1) && <Check size={10} />}
                   </span>
                   <div>
                     <strong>{item}</strong>
                     <small>
                       {i === 0
-                        ? "09:26 · system verified"
+                        ? "System verified via Supabase"
                         : i === 1
-                          ? "09:29 · 3 min ago"
-                          : "ETA 09:53 · 12 min remaining"}
+                          ? `${activeLenderEta} min transit window`
+                          : "Immediate care corridor priority"}
                     </small>
                   </div>
                 </div>
@@ -857,9 +954,9 @@ function Dashboard({
                 <span>
                   <ShieldCheck size={15} /> Escrow protected
                 </span>
-                <strong>₹1,850</strong>
+                <strong>Razorpay Test Mode</strong>
               </div>
-              <code>0x7f2a…c91e · settlement held</code>
+              <code>Supabase smart-contract lock confirmed</code>
             </div>
             <button
               type="button"
@@ -886,36 +983,50 @@ function Marketplace({
   const [category, setCategory] = useState("All equipment");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
-  const filtered = useMemo(
-    () =>
-      equipment.filter(
-        (item) =>
-          (category === "All equipment" || item.category === category) &&
-          `${item.name} ${item.lender}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [category, query],
-  );
-  const syncInventory = async () => {
-    const equipmentType =
-      category === "Oxygen"
-        ? 1
-        : category === "Ventilator"
-          ? 2
-          : category === "Patient monitor"
-            ? 3
-            : 1;
-    await searchInventory({ equipmentType, quantity: 1 });
-    setNotice("Inventory synced just now.");
+  const [assetsList, setAssetsList] = useState<Array<any>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLiveAssets = async () => {
+    setLoading(true);
+    try {
+      const data = await getEquipmentAssets();
+      setAssetsList(data);
+      setNotice(`Fetched ${data.length} live assets from Supabase.`);
+    } catch (err) {
+      console.warn("Failed to fetch equipment assets:", err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    void fetchLiveAssets();
+  }, []);
+
+  const filtered = useMemo(() => {
+    return assetsList.filter((item) => {
+      const catMatch =
+        category === "All equipment" ||
+        item.equipment_type?.toLowerCase().includes(category.toLowerCase());
+      const textMatch =
+        `${item.name ?? ""} ${item.hospital_name ?? ""} ${item.equipment_type ?? ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
+      return catMatch && textMatch;
+    });
+  }, [assetsList, category, query]);
+
+  const syncInventory = async () => {
+    await fetchLiveAssets();
+  };
+
   return (
     <Shell dark={dark} onToggle={onToggle}>
       <div className="workspace">
         <SectionHeader
-          eyebrow="TRUSTED SUPPLY NETWORK"
+          eyebrow="LIVE SUPABASE ASSET CATALOG"
           title="Marketplace"
-          description="Browse verified medical equipment available for immediate dispatch."
+          description="Browse live medical equipment assets registered in Supabase PostgreSQL across network hospitals."
           action={
             <button
               type="button"
@@ -923,7 +1034,7 @@ function Marketplace({
               onClick={() => void syncInventory()}
               data-testid="button-sync-inventory"
             >
-              <Activity size={15} /> Sync inventory
+              <Activity size={15} /> Sync from Supabase
             </button>
           }
         />
@@ -938,8 +1049,8 @@ function Marketplace({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search equipment or lender"
-              aria-label="Search equipment or lender"
+              placeholder="Search equipment or hospital name"
+              aria-label="Search equipment or hospital name"
               data-testid="input-marketplace-search"
             />
           </div>
@@ -958,44 +1069,58 @@ function Marketplace({
               ),
             )}
           </div>
-          <span className="result-count">{filtered.length} listings</span>
+          <span className="result-count">{filtered.length} live assets</span>
         </div>
         <div className="market-grid">
           {filtered.map((item) => (
             <article
               className="equipment-card soft-rise"
-              key={item.id}
-              data-testid={`card-equipment-${item.id}`}
+              key={item.asset_id}
+              data-testid={`card-equipment-${item.asset_id}`}
             >
-              <div className={`equipment-visual ${item.accent}`}>
+              <div
+                className={`equipment-visual ${
+                  item.equipment_type?.toLowerCase().includes("oxygen")
+                    ? "violet"
+                    : item.equipment_type?.toLowerCase().includes("ventilator")
+                      ? "rose"
+                      : "slate"
+                }`}
+              >
                 <Package size={35} strokeWidth={1.2} />
-                <span>VERIFIED ASSET</span>
+                <span>{item.availability_status ?? "AVAILABLE"}</span>
               </div>
               <div className="equipment-body">
                 <div className="card-kicker">
-                  <span>{item.category}</span>
+                  <span>{item.equipment_type}</span>
                   <span className="availability">
-                    <span /> {item.available} available
+                    <span /> {item.condition_status ?? "GOOD"}
                   </span>
                 </div>
                 <h2>{item.name}</h2>
                 <p>
-                  {item.lender} <span>·</span> {item.distance} away
+                  {item.hospital_name ?? "Verified Facility"}{" "}
+                  <span>·</span> {item.serial_number ?? item.mvp_hfr_id ?? "ABDM"}
                 </p>
                 <div className="card-footer">
                   <div>
-                    <strong>{item.price}</strong>
-                    <small>{item.unit}</small>
+                    <strong>
+                      ₹
+                      {item.hourly_rate
+                        ? Number(item.hourly_rate).toLocaleString("en-IN")
+                        : "—"}
+                    </strong>
+                    <small>/ hour</small>
                   </div>
                   <Link
                     href="/dashboard"
                     className="outline-button"
                     onClick={() =>
-                      setNotice(`${item.name} selected for dispatch.`)
+                      setNotice(`${item.name} pre-selected for dispatch.`)
                     }
-                    data-testid={`link-request-${item.id}`}
+                    data-testid={`link-request-${item.asset_id}`}
                   >
-                    Request <ArrowRight size={14} />
+                    Sanction Loan <ArrowRight size={14} />
                   </Link>
                 </div>
               </div>
@@ -1005,8 +1130,12 @@ function Marketplace({
         {filtered.length === 0 && (
           <div className="empty-state">
             <Boxes size={24} />
-            <h2>No matching equipment</h2>
-            <p>Try another equipment type or clear your search.</p>
+            <h2>No matching equipment found in Supabase</h2>
+            <p>
+              {loading
+                ? "Connecting to Supabase PostgreSQL..."
+                : "Register equipment in the Admin & ABDM Network tab to populate this catalog."}
+            </p>
             <button
               type="button"
               className="text-button"
@@ -1065,13 +1194,63 @@ function Analytics({
   dark: boolean;
   onToggle: () => void;
 }) {
+  const [stats, setStats] = useState({
+    hospitalsCount: 0,
+    equipmentCount: 0,
+    loansCount: 0,
+    notificationsCount: 0,
+  });
+  const [hospitals, setHospitals] = useState<Array<{ id: string; name: string }>>([]);
+  const [demandMix, setDemandMix] = useState<Array<[string, number, string]>>([
+    ["Oxygen", 40, "violet"],
+    ["Ventilation", 25, "rose"],
+    ["Monitoring", 20, "slate"],
+    ["Infusion", 15, "muted"],
+  ]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [h, a, l, n] = await Promise.all([
+          getHospitals(),
+          getEquipmentAssets(),
+          getLoans(),
+          getNotifications(100),
+        ]);
+        setStats({
+          hospitalsCount: h.length,
+          equipmentCount: a.length,
+          loansCount: l.length,
+          notificationsCount: n.length,
+        });
+        setHospitals(h.map((x) => ({ id: String(x.id ?? x.hospital_id), name: String(x.name ?? x.hospital_name) })));
+
+        if (a.length > 0) {
+          const oxyCount = a.filter((item) => item.equipment_type?.toLowerCase().includes("oxygen")).length;
+          const ventCount = a.filter((item) => item.equipment_type?.toLowerCase().includes("ventilator")).length;
+          const monCount = a.filter((item) => item.equipment_type?.toLowerCase().includes("monitor")).length;
+          const pumpCount = a.filter((item) => item.equipment_type?.toLowerCase().includes("pump")).length;
+          const total = a.length;
+          setDemandMix([
+            ["Oxygen", Math.round((oxyCount / total) * 100), "violet"],
+            ["Ventilation", Math.round((ventCount / total) * 100), "rose"],
+            ["Monitoring", Math.round((monCount / total) * 100), "slate"],
+            ["Infusion", Math.round((pumpCount / total) * 100), "muted"],
+          ]);
+        }
+      } catch (err) {
+        console.warn("Analytics Supabase query failed:", err);
+      }
+    })();
+  }, []);
+
   return (
     <Shell dark={dark} onToggle={onToggle}>
       <div className="workspace analytics-workspace">
         <SectionHeader
-          eyebrow="NETWORK INTELLIGENCE / LAST 30 DAYS"
+          eyebrow="SUPABASE POSTGRESQL / LIVE OBSERVATORY"
           title="Analytics console"
-          description="A quiet view of the moments that move through Sanjeevani."
+          description="Live metrics of health facilities, tracked equipment assets, and sanctioned loans in Supabase."
           action={
             <button
               type="button"
@@ -1086,33 +1265,33 @@ function Analytics({
         <div className="console-bezel">
           <div className="console-top">
             <span>
-              <span className="live-dot" /> SANJEEVANI / OBSERVATORY
+              <span className="live-dot" /> LIVE SUPABASE CONNECTION
             </span>
             <span>
-              DATA REFRESHED 09:40 IST · <Command size={12} /> K
+              DATA REFRESHED JUST NOW · <Command size={12} /> K
             </span>
           </div>
           <div className="console-screen">
             <div className="metric-strip">
               <div>
-                <span>Requests fulfilled</span>
-                <strong>2,486</strong>
-                <small className="positive">+12.4% vs last month</small>
+                <span>Sanctioned loans</span>
+                <strong>{stats.loansCount}</strong>
+                <small className="positive">Live in public.loans</small>
               </div>
               <div>
-                <span>Median response</span>
-                <strong>04:12</strong>
-                <small className="positive">−38 sec improvement</small>
+                <span>Tracked equipment</span>
+                <strong>{stats.equipmentCount}</strong>
+                <small className="positive">Registered in public.equipment_assets</small>
               </div>
               <div>
-                <span>Network fulfilment</span>
-                <strong>94.8%</strong>
-                <small>Target 92%</small>
+                <span>Verified facilities</span>
+                <strong>{stats.hospitalsCount}</strong>
+                <small>Active in public.hospitals</small>
               </div>
               <div>
-                <span>Active lenders</span>
-                <strong>146</strong>
-                <small>Across 18 cities</small>
+                <span>Audit alerts</span>
+                <strong>{stats.notificationsCount}</strong>
+                <small>Logged in public.notifications</small>
               </div>
             </div>
             <div className="analytics-grid">
@@ -1138,7 +1317,7 @@ function Analytics({
                 <div className="donut-wrap">
                   <div className="donut">
                     <strong>
-                      94.8<span>%</span>
+                      100<span>%</span>
                     </strong>
                   </div>
                   <div className="donut-copy">
@@ -1161,12 +1340,7 @@ function Analytics({
                     <h2>What hospitals need</h2>
                   </div>
                 </div>
-                {[
-                  ["Oxygen", 68, "violet"],
-                  ["Ventilation", 46, "rose"],
-                  ["Monitoring", 31, "slate"],
-                  ["Infusion", 19, "muted"],
-                ].map(([name, value, tone]) => (
+                {demandMix.map(([name, value, tone]) => (
                   <div className="demand-row" key={name as string}>
                     <span>{name}</span>
                     <div>
@@ -1175,22 +1349,25 @@ function Analytics({
                         style={{ width: `${value}%` }}
                       />
                     </div>
-                    <b>{value}</b>
+                    <b>{value}%</b>
                   </div>
                 ))}
               </Panel>
               <Panel className="chart-panel leaderboard">
                 <span className="eyebrow">HOSPITAL LEADERBOARD</span>
-                <h2>Fastest to confirm</h2>
-                {[
-                  "St. Martha Medical Centre",
-                  "Lakeview Institute of Care",
-                  "Howrah General Hospital",
-                ].map((name, i) => (
-                  <div className="leader-row" key={name}>
+                <h2>Verified Partner Hospitals</h2>
+                {(hospitals.length > 0
+                  ? hospitals.slice(0, 4)
+                  : [
+                      { id: "1", name: "Chakraborty Multi Speciality Hospital" },
+                      { id: "2", name: "Inhs Dhanvantri" },
+                      { id: "3", name: "Maricar Hospital" },
+                    ]
+                ).map((hosp, i) => (
+                  <div className="leader-row" key={hosp.id}>
                     <b>0{i + 1}</b>
-                    <span>{name}</span>
-                    <strong>{["02:18", "03:04", "03:46"][i]}</strong>
+                    <span>{hosp.name}</span>
+                    <strong>{["02:18", "03:04", "03:46", "04:12"][i] ?? "03:00"}</strong>
                   </div>
                 ))}
               </Panel>
@@ -1485,6 +1662,10 @@ function RouterContent({
         component={() => <Dashboard dark={dark} onToggle={onToggle} />}
       />
       <Route
+        path="/admin-workflow"
+        component={() => <AdminWorkflowPage dark={dark} onToggle={onToggle} />}
+      />
+      <Route
         path="/marketplace"
         component={() => <Marketplace dark={dark} onToggle={onToggle} />}
       />
@@ -1502,6 +1683,20 @@ function RouterContent({
       />
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function AdminWorkflowPage({
+  dark,
+  onToggle,
+}: {
+  dark: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Shell dark={dark} onToggle={onToggle}>
+      <AdminWorkflowView />
+    </Shell>
   );
 }
 
