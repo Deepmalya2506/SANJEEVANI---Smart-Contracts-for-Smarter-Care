@@ -318,8 +318,12 @@ export function AdminWorkflowView() {
       setSanctionStatus("Please select a nearby lender hospital from ABDM discovery first.");
       return;
     }
-    const lenderHid = selectedHospitalForLoan.hospital_id;
-    if (!lenderHid || lenderHid === registeredOrg.hospital_id) {
+    const lenderHid = selectedHospitalForLoan.hospital_id || selectedHospitalForLoan.mvp_hfr_id;
+    if (
+      !lenderHid ||
+      lenderHid === registeredOrg.hospital_id ||
+      (selectedHospitalForLoan.mvp_hfr_id && selectedHospitalForLoan.mvp_hfr_id === registeredOrg.mvp_hfr_id)
+    ) {
       setSanctionStatus("Please select a different ABDM hospital as lender. A hospital cannot sanction an inter-hospital loan to itself.");
       return;
     }

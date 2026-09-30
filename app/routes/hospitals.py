@@ -448,7 +448,9 @@ def register_hospital_and_admin(data: HospitalRegistrationRequest, background_ta
     """
     hospital_id = uuid4()
     user_id = uuid4()
-    auth_user_id = uuid4()
+    email_clean = str(data.email).strip()
+    admin_clean = data.admin_name.strip()
+    hosp_name_clean = data.hospital_name.strip()
 
     # Determine HFR ID and verify coordinates against Supabase public.abdm_mock_hfr
     resolved_hfr_id = (data.mvp_hfr_id or "").strip()
@@ -457,6 +459,7 @@ def register_hospital_and_admin(data: HospitalRegistrationRequest, background_ta
 
     with get_supabase_connection() as connection:
         with connection.cursor(row_factory=dict_row) as cursor:
+            # 1. Resolve or generate ABDM HFR identifier
             if not resolved_hfr_id:
                 cursor.execute(
                     """
@@ -465,7 +468,7 @@ def register_hospital_and_admin(data: HospitalRegistrationRequest, background_ta
                     WHERE LOWER(hospital_name) = LOWER(%s)
                     LIMIT 1
                     """,
-                    (data.hospital_name.strip(),),
+                    (hosp_name_clean,),
                 )
                 match = cursor.fetchone()
                 if match:
@@ -490,27 +493,119 @@ def register_hospital_and_admin(data: HospitalRegistrationRequest, background_ta
                     lat = lat or 11.6358
                     lon = lon or 92.7121
 
-            # Persist hospital and admin user in Supabase PostgreSQL
+            # 2. Ensure auth.users record exists to satisfy fk_users_auth foreign key
+            cursor.execute("SELECT id FROM auth.users WHERE email = %s LIMIT 1", (email_clean,))
+            auth_row = cursor.fetchone()
+            if auth_row:
+                auth_user_id = auth_row["id"]
+            else:
+                auth_user_id = uuid4()
+                cursor.execute(
+                    """
+                    INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updated_at, aud, role)
+                    VALUES (%s, %s, %s, now(), now(), 'authenticated', 'authenticated')
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (auth_user_id, email_clean, json.dumps({"admin_name": admin_clean})),
+                )
+
+            # 3. Ensure abdm_mock_hfr entry exists to satisfy fk_hospitals_mvp_hfr foreign key
+            cursor.execute("SELECT mvp_hfr_id FROM public.abdm_mock_hfr WHERE mvp_hfr_id = %s LIMIT 1", (resolved_hfr_id,))
+            if not cursor.fetchone():
+                cursor.execute(
+                    """
+                    INSERT INTO public.abdm_mock_hfr (mvp_hfr_id, hospital_name, latitude, longitude, address)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (mvp_hfr_id) DO NOTHING
+                    """,
+                    (resolved_hfr_id, hosp_name_clean, lat, lon, data.address or f"{hosp_name_clean} Medical Center"),
+                )
+
+            # 4. Upsert hospital organization in public.hospitals
+            cursor.execute("SELECT hospital_id FROM public.hospitals WHERE mvp_hfr_id = %s LIMIT 1", (resolved_hfr_id,))
+            existing_h = cursor.fetchone()
+            if existing_h:
+                hospital_id = existing_h["hospital_id"]
+                cursor.execute(
+                    """
+                    UPDATE public.hospitals
+                    SET hospital_name = %s, profile_status = 'ACTIVE', verification_status = 'VERIFIED', updated_at = now()
+                    WHERE hospital_id = %s
+                    """,
+                    (hosp_name_clean, hospital_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO public.hospitals (
+                        hospital_id, mvp_hfr_id, hospital_name, verification_status, profile_status
+                    )
+                    VALUES (%s, %s, %s, 'VERIFIED', 'ACTIVE')
+                    ON CONFLICT (hospital_id) DO UPDATE
+                    SET hospital_name = EXCLUDED.hospital_name, profile_status = 'ACTIVE', verification_status = 'VERIFIED'
+                    """,
+                    (hospital_id, resolved_hfr_id, hosp_name_clean),
+                )
+
+            # 5. Upsert administrator in public.users
+            cursor.execute("SELECT user_id FROM public.users WHERE hospital_id = %s OR user_mail = %s LIMIT 1", (hospital_id, email_clean))
+            existing_u = cursor.fetchone()
+            if existing_u:
+                user_id = existing_u["user_id"]
+                cursor.execute(
+                    """
+                    UPDATE public.users
+                    SET admin_name = %s, user_mail = %s, auth_user_id = %s, profile_completed = true, updated_at = now()
+                    WHERE user_id = %s
+                    """,
+                    (admin_clean, email_clean, auth_user_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO public.users (
+                        user_id, auth_user_id, hospital_id, admin_name, user_mail, profile_completed
+                    )
+                    VALUES (%s, %s, %s, %s, %s, true)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    (user_id, auth_user_id, hospital_id, admin_clean, email_clean),
+                )
+
+            # 6. Ensure hospital wallet entry exists
+            cursor.execute("SELECT wallet_id FROM public.hospital_wallets WHERE hospital_id = %s LIMIT 1", (hospital_id,))
+            if not cursor.fetchone():
+                wallet_addr = f"0x{uuid4().hex[:40]}"
+                cursor.execute(
+                    """
+                    INSERT INTO public.hospital_wallets (wallet_id, hospital_id, address, network, verified, created_at, updated_at)
+                    VALUES (%s, %s, %s, 'sepolia', true, now(), now())
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (uuid4(), hospital_id, wallet_addr),
+                )
+
+            # 7. Record activity event
             cursor.execute(
                 """
-                INSERT INTO public.hospitals (
-                    hospital_id, mvp_hfr_id, hospital_name, verification_status, profile_status
+                INSERT INTO public.activity_events (
+                    activity_id, hospital_id, user_id, entity_type, entity_id, event_type, metadata
                 )
-                VALUES (%s, %s, %s, 'VERIFIED', 'ACTIVE')
-                ON CONFLICT (hospital_id) DO NOTHING
+                VALUES (%s, %s, %s, 'ORGANIZATION', %s, 'organization.created', %s)
                 """,
-                (hospital_id, resolved_hfr_id, data.hospital_name.strip()),
+                (
+                    uuid4(),
+                    hospital_id,
+                    user_id,
+                    hospital_id,
+                    json.dumps({
+                        "hospital_name": hosp_name_clean,
+                        "mvp_hfr_id": resolved_hfr_id,
+                        "admin_name": admin_clean,
+                    }),
+                ),
             )
-            cursor.execute(
-                """
-                INSERT INTO public.users (
-                    user_id, auth_user_id, hospital_id, admin_name, user_mail, profile_completed
-                )
-                VALUES (%s, %s, %s, %s, %s, true)
-                ON CONFLICT (user_id) DO NOTHING
-                """,
-                (user_id, auth_user_id, hospital_id, data.admin_name.strip(), str(data.email).strip()),
-            )
+
             connection.commit()
 
     # Dispatch welcome email

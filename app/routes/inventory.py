@@ -422,12 +422,37 @@ def sanction_equipment_transaction(
                     borrower_hospital_id = b_hid
 
                 # 2. Resolve lender hospital
+                raw_lender = str(data.lender_hospital_id or "").strip()
+                lender_hospital_id = None
                 try:
-                    lender_hospital_id = UUID(str(data.lender_hospital_id).strip())
-                except Exception as exc:
+                    lender_hospital_id = UUID(raw_lender)
+                except Exception:
+                    # Check if raw_lender matches an mvp_hfr_id in public.hospitals
+                    cursor.execute("SELECT hospital_id FROM public.hospitals WHERE mvp_hfr_id = %s LIMIT 1", (raw_lender,))
+                    matched_h = cursor.fetchone()
+                    if matched_h:
+                        lender_hospital_id = matched_h["hospital_id"]
+                    else:
+                        # Check in public.abdm_mock_hfr and auto-provision hospital
+                        cursor.execute("SELECT mvp_hfr_id, hospital_name, latitude, longitude, address FROM public.abdm_mock_hfr WHERE mvp_hfr_id = %s LIMIT 1", (raw_lender,))
+                        abdm_row = cursor.fetchone()
+                        if abdm_row:
+                            new_hosp_id = uuid4()
+                            cursor.execute(
+                                """
+                                INSERT INTO public.hospitals (hospital_id, mvp_hfr_id, hospital_name, verification_status, profile_status)
+                                VALUES (%s, %s, %s, 'VERIFIED', 'ACTIVE')
+                                ON CONFLICT (mvp_hfr_id) DO UPDATE SET profile_status = 'ACTIVE'
+                                RETURNING hospital_id
+                                """,
+                                (new_hosp_id, abdm_row["mvp_hfr_id"], abdm_row["hospital_name"]),
+                            )
+                            lender_hospital_id = cursor.fetchone()["hospital_id"]
+
+                if not lender_hospital_id:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Invalid lender_hospital_id format: {exc}",
+                        detail="Lender hospital could not be resolved. Please provide a valid hospital UUID or ABDM HFR ID.",
                     )
 
                 if borrower_hospital_id and lender_hospital_id == borrower_hospital_id:
@@ -465,6 +490,31 @@ def sanction_equipment_transaction(
                         LIMIT 1
                         """,
                         (lender_hospital_id, data.equipment_type.strip()),
+                    )
+                    asset_record = cursor.fetchone()
+
+                # If no matching available asset exists at lender, provision a network-registered asset
+                if not asset_record:
+                    prov_asset_id = uuid4()
+                    eq_name = f"Network Certified {data.equipment_type.strip()}"
+                    calc_rate = round(float(data.amount_rupees) / max(1, data.duration_hours), 2)
+                    cursor.execute(
+                        """
+                        INSERT INTO public.equipment_assets (
+                            asset_id, hospital_id, equipment_type, name, serial_number,
+                            condition_status, availability_status, shareable, hourly_rate
+                        )
+                        VALUES (%s, %s, %s, %s, %s, 'OPERATIONAL', 'AVAILABLE', true, %s)
+                        RETURNING asset_id, hospital_id, equipment_type, name, hourly_rate, availability_status
+                        """,
+                        (
+                            prov_asset_id,
+                            lender_hospital_id,
+                            data.equipment_type.strip(),
+                            eq_name,
+                            f"SN-{uuid4().hex[:8].upper()}",
+                            calc_rate,
+                        ),
                     )
                     asset_record = cursor.fetchone()
 
